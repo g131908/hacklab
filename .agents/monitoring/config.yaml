@@ -1,0 +1,48 @@
+# Ads monitoring agent config (template: .claude/skills/ads-monitoring-agent/SKILL.md section 10)
+marketplace: "HackLab Demo Marketplace"
+timezone: "Europe/Berlin"
+currency: "EUR"
+data_sources:
+  - type: "demo"                 # csv|api|mcp|sql|demo  (demo = CSV from src/generate_demo_data.py)
+    location: "data/"
+    advertisers_file: "advertisers.csv"
+    supply_file: "supply.csv"
+scope:
+  accounts: ["*"]
+  strategic_accounts: ["adv_01"]
+thresholds:
+  min_conversions_window: 30     # S3 (not built yet)
+  money_at_risk_threshold: 500   # EUR per day
+  max_data_staleness_hours: 2    # freshness self-check
+  s1_pacing_high: 1.30           # spend-to-date vs expected
+  s1_pacing_low: 0.60
+  s1_min_expected_spend: 150     # EUR spend-to-date before S1 is judged (min sample)
+  s4_window_hours: 3
+  s4_conv_drop: 0.80             # fires when conversions <= (1 - 0.80) x expected
+  s4_clicks_normal_band: [0.70, 1.30]
+  s4_min_expected_conversions: 15
+  s6_ctr_drop: 0.25              # CTR -25% over 3 days
+  s6_min_daily_impressions: 50000
+  s6_check_hour: 6               # S6 runs once a day at this hour
+  s7_ctr_sigma: 3.0
+  s7_fast_conv_share: 0.30       # share of conversions < 10s after click
+  s7_ip_concentration: 0.20      # top IP share of clicks
+  s7_min_clicks: 50
+caps:
+  hard_daily_spend_cap: 10000
+  max_budget_change_pct: 20
+autonomy:                        # Tier-2 actions allowed without approval (default: none)
+  allowed_actions: []
+  allowlist: []
+cooldown_hours: 6
+auto_resolve_checks: 2
+notify:
+  channel: "stdout"
+  approvers: ["Marco"]
+known_events:
+  - name: "Buss- und Bettag (holiday)"
+    start: "2026-11-18 00:00"
+    end: "2026-11-19 00:00"      # exclusive
+    scope: ["*"]
+    expected_effect: "volume_drop"
+    suppress_signals: ["S1", "S4"]
