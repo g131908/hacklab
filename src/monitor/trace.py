@@ -134,6 +134,9 @@ def synth_step(tr: Trace, al: dict, why: str, ms: float):
 def gate_step(tr: Trace, sev: int, kind: str, decision: str | None, decided_by: str, ms: float):
     if kind == "digest":
         tr.add("gate", "skip", "SEV 1-2: no interrupt, goes to the daily digest")
+    elif decision is None and sev >= 4:
+        tr.add("gate", "warn", "awaiting human decision: pending in decisions.md (python src/decide.py)",
+               dict(decision="pending", decided_by=decided_by, executed=False), ms)
     elif decision is None:
         tr.add("gate", "info", "SEV 3: recommendation staged, no decision required now",
                dict(staged=True), ms)

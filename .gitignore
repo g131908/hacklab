@@ -11,3 +11,4 @@ data/injected.json
 .agents/monitoring/KILL
 .agents/monitoring/decisions.md
 dashboard/
+.agents/monitoring/live-cursor.json

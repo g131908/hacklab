@@ -28,14 +28,16 @@ def _ms(t0: float) -> float:
 
 
 def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
-             notify: Notifier, decide: Decider, router: Router | None = None) -> list[dict]:
-    """Returns events for display: alert | suppressed | resolved | pipeline | error | killed."""
+             notify: Notifier, decide: Decider, router: Router | None = None,
+             wall: pd.Timestamp | None = None) -> list[dict]:
+    """Returns events for display: alert | suppressed | resolved | pipeline | error | killed.
+    `now` is the data hour to evaluate; `wall` (live mode) is the real clock for the freshness check."""
     if state.killed():
         state.log_run(now, 0, 0, 0, 0, note="killed (KILL file present)")
         return [dict(type="killed", ts=now)]
 
     events: list[dict] = []
-    fresh = freshness(data, now, cfg)
+    fresh = freshness(data, wall if wall is not None else now, cfg)
     if not fresh[0]:
         ev = dict(type="pipeline", ts=now, severity=3, signal="data_pipeline", text=fresh[1])
         state.log_event(dict(event="alert", **ev))
@@ -116,9 +118,18 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         if kind == "alert":
             alerted += 1
             if sev >= 4:
-                decision = decide(al)
-                state.log_decision(rec["anomaly_id"], decision, al["options"][decision],
-                                   ", ".join(cfg["notify"]["approvers"]), data.label)
+                decision = decide(al)  # None = no human available now -> pending approval
+                if decision in ("A", "B"):
+                    rec["decision"] = decision
+                    state.log_decision(rec["anomaly_id"], decision, al["options"][decision],
+                                       getattr(decide, "mode", "human"), data.label)
+                else:
+                    decision = None
+                    rec["decision"] = "pending"
+                    rec["options"] = al["options"]
+                    rec["recommended"] = al["recommended"]
+                    state.log_pending(rec["anomaly_id"], al["headline"], al["options"], al["recommended"],
+                                      ", ".join(cfg["notify"]["approvers"]), data.label)
         tr_mod.gate_step(tr, sev, kind, decision, getattr(decide, "mode", "human"), _ms(t0))
         tr_mod.log_step(tr, rec, ", decisions.md" if decision else "")
 

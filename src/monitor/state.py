@@ -84,6 +84,18 @@ class State:
             f.write(f"{now} checked={checked} fired={fired} alerted={alerted} "
                     f"suppressed={suppressed} errors={errors} {note}".rstrip() + "\n")
 
+    def log_pending(self, anomaly_id: str, headline: str, options: dict, recommended: str,
+                    approvers: str, data_label: str = "") -> None:
+        new = not self.decisions_path.exists()
+        with self.decisions_path.open("a", encoding="utf-8") as f:
+            if new:
+                f.write("# Decisions\n\n")
+            stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            label = f" [{data_label}]" if data_label else ""
+            f.write(f"- {stamp}{label} `{anomaly_id}`: PENDING - {headline}. A) {options['A']} | B) {options['B']} "
+                    f"| recommended {recommended}. Approvers: {approvers}. "
+                    f"Decide: python src/decide.py {anomaly_id} A|B\n")
+
     def log_decision(self, anomaly_id: str, option: str, text: str, approver: str,
                      data_label: str = "") -> None:
         new = not self.decisions_path.exists()
