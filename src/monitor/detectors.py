@@ -81,13 +81,13 @@ def detect_s1(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]
                       f"(same weekday last week, {win}) = {ratio:.0%} pace"]
         if ratio > th["s1_pacing_high"]:
             d.fired, d.direction = True, "up"
-            d.title = f"Spend pacing {ratio:.0%}"
+            d.title = f"pacing {ratio:.0%} of expected"
             d.money_at_risk_day = (ratio - 1) * full_day_lw
             d.money_note = (f"~EUR {_fmt(d.money_at_risk_day)}/day overspend if pace holds "
                             f"(last week's day: EUR {_fmt(full_day_lw)})")
         elif ratio < th["s1_pacing_low"]:
             d.fired, d.direction = True, "down"
-            d.title = f"Spend under-pacing {ratio:.0%}"
+            d.title = f"under-pacing {ratio:.0%} of expected"
             d.money_at_risk_day = (1 - ratio) * full_day_lw
             d.money_note = f"~EUR {_fmt(d.money_at_risk_day)}/day of planned delivery not spent"
         out.append(d)
@@ -129,7 +129,7 @@ def detect_s4(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]
         ]
         if conv_ratio <= 1 - th["s4_conv_drop"] and lo <= click_ratio <= hi:
             d.fired, d.direction = True, "down"
-            d.title = f"Tracking break - conversions {c_now:.0f} since {start:%H:%M}"
+            d.title = f"conversions {c_now:.0f} in {hrs}h vs ~{c_exp:.0f} expected, clicks normal"
             d.money_at_risk_day = day_lw
             d.money_note = (f"~EUR {_fmt(day_lw)}/day of spend optimizing against no signal "
                             "(last week's same-weekday spend); bidding degrades within 24-48h")
@@ -173,7 +173,7 @@ def detect_s6(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]
         if change <= -th["s6_ctr_drop"] and f1 > f4:
             day_spend = _sum(spend, adv, d1, d1 + 23 * HOUR) or 0.0
             d.fired, d.direction = True, "down"
-            d.title = f"Creative fatigue - CTR {change:+.0%} in 3 days, frequency up"
+            d.title = f"CTR {change:+.0%} in 3 days, frequency up"
             d.money_at_risk_day = -change * day_spend
             d.money_note = (f"~EUR {_fmt(d.money_at_risk_day)}/day of spend buying fewer clicks "
                             f"(EUR {_fmt(day_spend)} spend on {d1:%d.%m} x {-change:.0%} CTR loss)")
@@ -226,7 +226,7 @@ def detect_s7(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]
         if z > th["s7_ctr_sigma"] and (fast_share > th["s7_fast_conv_share"]
                                        or ip_share > th["s7_ip_concentration"]):
             d.fired, d.direction = True, "up"
-            d.title = f"Invalid traffic suspected - CTR {z:+.0f} sigma"
+            d.title = f"CTR {z:+.0f} sigma, sub-10s conversions / IP cluster"
             d.money_at_risk_day = excess * cpc * 24
             d.money_note = (f"~EUR {_fmt(excess * cpc)}/h billed for suspect clicks "
                             f"({excess:,.0f} x EUR {cpc:.2f} avg CPC); ~EUR {_fmt(d.money_at_risk_day)}/day if sustained")
