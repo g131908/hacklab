@@ -43,7 +43,7 @@ routing:
 live:                            # src/live.py, called hourly by /loop or cron
   mode: "demo"                   # demo = next hour of demo data per tick | live = newest real data hour
   demo_start: "2026-11-13 00:00" # first hour with a same-weekday baseline, shortly before the first scenario
-  demo_hours_per_tick: 1
+  demo_hours_per_tick: 12
 cooldown_hours: 6
 auto_resolve_checks: 2
 notify:
