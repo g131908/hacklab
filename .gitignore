@@ -4,3 +4,8 @@ __pycache__/
 data/*.csv
 .agents/monitoring/runs.log
 *.zip
+Claude outputs/
+data/injected.json
+.agents/monitoring/open-anomalies.json
+.agents/monitoring/alerts.jsonl
+.agents/monitoring/KILL
