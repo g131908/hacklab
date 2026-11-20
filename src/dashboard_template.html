@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketplace Monitor</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --baseline: #898781;
+  --band-injected: rgba(42,120,214,0.07);
+  --band-event: rgba(137,135,129,0.16);
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --chip: #f0efec;
+  --shadow: 0 1px 2px rgba(11,11,11,0.06);
+  --overlay: rgba(11,11,11,0.45);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --baseline: #898781;
+    --band-injected: rgba(57,135,229,0.12); --band-event: rgba(195,194,183,0.12);
+    --good-text: #0ca30c; --chip: #2c2c2a; --shadow: none; --overlay: rgba(0,0,0,0.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --baseline: #898781;
+  --band-injected: rgba(57,135,229,0.12); --band-event: rgba(195,194,183,0.12);
+  --good-text: #0ca30c; --chip: #2c2c2a; --shadow: none; --overlay: rgba(0,0,0,0.6);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1440px; margin: 0 auto; padding: 16px 20px 40px; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; }
+h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.label-chip { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 2px 8px;
+  border-radius: 999px; background: var(--ink); color: var(--surface); margin-left: 8px; vertical-align: 2px; }
+.meta { color: var(--ink-2); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+.controls { margin-top: 14px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.controls button, .controls select, .btn {
+  font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--chip); color: var(--ink); cursor: pointer;
+}
+.controls button.primary { background: var(--series-1); color: #fff; border-color: transparent; min-width: 84px; font-weight: 600; }
+.controls button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, .ev:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.clock { font-size: 22px; font-weight: 650; min-width: 190px; }
+.clock small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+#scrub { flex: 1 1 260px; accent-color: var(--series-1); }
+.toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); font-size: 13px; cursor: pointer; }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.kpi { padding: 12px 14px; }
+.kpi .k { font-size: 12px; color: var(--ink-2); }
+.kpi .v { font-size: 28px; font-weight: 650; margin-top: 2px; }
+.kpi .s { font-size: 12px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 14px 0; flex-wrap: wrap; }
+.card-h h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card-h .sub { color: var(--muted); font-size: 12px; }
+.card-b { padding: 6px 14px 14px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin: 4px 0 2px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.legend .bandkey { width: 12px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; color: var(--ink); }
+.tip .t { color: var(--muted); margin-bottom: 3px; }
+.tip .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.tip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip .evline { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--grid); }
+.small-multiples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.sm-title { font-size: 13px; font-weight: 600; margin: 6px 0 0; }
+.note { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.focus-head { font-size: 14px; font-weight: 600; margin: 2px 0 6px; }
+.empty { color: var(--muted); font-size: 13px; padding: 26px 4px; text-align: center; }
+.table-wrap { max-height: 260px; overflow: auto; margin-top: 8px; border-top: 1px solid var(--grid); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+th { color: var(--ink-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+td.num, th.num { text-align: right; }
+.feed { max-height: 860px; overflow: auto; padding: 4px 10px 12px; }
+.ev { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-top: 8px; cursor: pointer; background: var(--surface); }
+.ev.sel { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
+.ev .row1 { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.ev .when { color: var(--muted); font-size: 12px; }
+.ev .hl { font-weight: 600; margin-top: 4px; }
+.ev .why { color: var(--ink-2); font-size: 12.5px; margin-top: 3px; }
+.ev .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--ink-2); }
+.chip.dis { color: var(--ink); font-weight: 600; }
+.ev.muted { cursor: default; color: var(--ink-2); border-style: dashed; }
+.ev.muted .hl { font-weight: 500; }
+.ev pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 8px 0 0; color: var(--ink); }
+.sev { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 1px 8px 1px 6px; border-radius: 999px; color: #fff; }
+.sev.s5 { background: var(--critical); } .sev.s4 { background: var(--serious); } .sev.s3 { background: var(--warning); color: #0b0b0b; }
+.sev.s2, .sev.s1 { background: var(--chip); color: var(--ink-2); }
+.status { font-weight: 600; }
+.status.ok { color: var(--good-text); } .status.pending { color: var(--muted); font-weight: 500; } .status.bad { color: var(--critical); }
+.score td { vertical-align: top; }
+.modal-bg { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+.modal { max-width: 860px; width: 100%; max-height: 92vh; overflow: auto; padding: 0; }
+.modal .page { background: var(--critical); color: #fff; padding: 8px 16px; font-weight: 700; border-radius: 10px 10px 0 0; letter-spacing: .02em; }
+.modal .inner { padding: 14px 18px 18px; }
+.modal h3 { margin: 4px 0 8px; font-size: 17px; }
+.modal pre { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--page);
+  border: 1px solid var(--grid); border-radius: 8px; padding: 10px 12px; margin: 0; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.choice { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--chip); color: var(--ink); cursor: pointer; font: inherit; }
+.choice b { display: block; margin-bottom: 2px; }
+.choice.rec { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
+.gate-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 18px; }
+kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--chip); }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .small-multiples { grid-template-columns: minmax(0, 1fr); }
+  .feed { max-height: none; }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 12px 16px 32px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .choices { grid-template-columns: 1fr; }
+  .clock { font-size: 18px; min-width: 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Marketplace Monitor <span class="label-chip" id="dataLabel"></span></h1>
+      <div class="meta" id="metaLine"></div>
+    </div>
+    <div class="meta">Pipeline: watch → self-check → triage → route → synthesize → gate → log</div>
+  </header>
+
+  <section class="card controls" aria-label="Replay controls">
+    <button class="primary" id="play" title="Play / pause (Space)">▶ Play</button>
+    <button id="next" title="Jump to next event (N)">Next event ⏭</button>
+    <button id="end" title="Jump to the end">End ⏩</button>
+    <button id="reset" title="Back to start">Reset</button>
+    <label class="toggle">Speed
+      <select id="speed">
+        <option value="6">6 h/s</option>
+        <option value="12" selected>12 h/s</option>
+        <option value="24">24 h/s</option>
+        <option value="48">48 h/s</option>
+      </select>
+    </label>
+    <div class="clock" id="clock"><small>Replay time</small><span></span></div>
+    <input type="range" id="scrub" min="0" value="0" aria-label="Replay time">
+    <label class="toggle"><input type="checkbox" id="gateToggle" checked> Pause at decisions (SEV ≥ 4)</label>
+    <label class="toggle"><input type="checkbox" id="truthToggle" checked> Show ground truth</label>
+  </section>
+
+  <section class="kpis" aria-label="Key figures">
+    <div class="card kpi"><div class="k">Alerts raised</div><div class="v" id="kAlerts">0</div><div class="s" id="kAlertsS">SEV ≥ 3 notifications</div></div>
+    <div class="card kpi"><div class="k">Suppressed by self-check</div><div class="v" id="kSup">0</div><div class="s" id="kSupS">raw detections that never paged anyone</div></div>
+    <div class="card kpi"><div class="k">Injected anomalies detected</div><div class="v" id="kDet">–</div><div class="s" id="kDetS">ground truth</div></div>
+    <div class="card kpi"><div class="k">False alarms</div><div class="v" id="kFa">0</div><div class="s" id="kFaS">alerts with no injected cause</div></div>
+    <div class="card kpi"><div class="k">Median time to detect</div><div class="v" id="kTtd">–</div><div class="s" id="kTtdS">injection → first alert</div></div>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card" aria-labelledby="ovTitle">
+        <div class="card-h">
+          <div><h2 id="ovTitle">Marketplace spend per hour</h2><div class="sub">all advertisers · vs same hour last week · markers = alerts / suppressed detections</div></div>
+          <button class="btn" data-table="overview">Table</button>
+        </div>
+        <div class="card-b">
+          <div class="legend" id="ovLegend"></div>
+          <div class="chart" id="overview"></div>
+          <div class="table-wrap" id="overview-table" hidden></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="fcTitle">
+        <div class="card-h">
+          <div><h2 id="fcTitle">Anomaly in focus</h2><div class="sub" id="fcSub">click an alert in the feed</div></div>
+          <button class="btn" data-table="focus">Table</button>
+        </div>
+        <div class="card-b">
+          <div class="focus-head" id="fcHead"></div>
+          <div id="focus"><div class="empty">No alert yet. Press Play or jump to the next event.</div></div>
+          <div class="table-wrap" id="focus-table" hidden></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="scTitle" id="scoreCard">
+        <div class="card-h"><div><h2 id="scTitle">Ground truth scorecard</h2><div class="sub">injected scenarios vs what the agent did</div></div></div>
+        <div class="card-b"><div class="table-wrap" style="max-height:none;border-top:0"><table class="score" id="score"></table></div></div>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="feedTitle">
+      <div class="card-h"><div><h2 id="feedTitle">Event feed</h2><div class="sub">newest first · click an alert for the full text</div></div></div>
+      <div class="feed" id="feed"><div class="empty">Waiting for the first event…</div></div>
+    </section>
+  </div>
+
+  <footer>
+    <span id="footLabel"></span> · Keys: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±1h · <kbd>N</kbd> next event · <kbd>Esc</kbd> close.
+    Decisions taken here are staged only — nothing is executed (Tier 2 needs a human in the real system).
+  </footer>
+</div>
+
+<div class="modal-bg" id="gate" hidden>
+  <div class="card modal" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+    <div class="page" id="gatePage" hidden>PAGED on-call — facts sent before the diagnosis finished</div>
+    <div class="inner">
+      <div class="when meta" id="gateWhen"></div>
+      <h3 id="gateTitle"></h3>
+      <pre id="gateText"></pre>
+      <div class="choices" id="gateChoices"></div>
+      <div class="gate-note" id="gateNote"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+(function () {
+  "use strict";
+  if (!DATA) { document.body.textContent = "No data embedded. Run: python src/dashboard.py"; return; }
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const t = (iso) => new Date(iso).getTime();
+  const HOUR = 3600e3;
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmtTime = (ms) => { const d = new Date(ms); return `${DOW[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${pad(d.getHours())}:00`; };
+  const fmtDay = (ms) => { const d = new Date(ms); return `${DOW[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`; };
+  const nf0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  const nf2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const FMT = {
+    int: (v) => nf0.format(v), eur: (v) => "€" + nf0.format(v), eur2: (v) => "€" + nf2.format(v),
+    pct: (v) => nf2.format(v) + "%", dec2: (v) => nf2.format(v),
+  };
+  const SEV_ICON = { 5: "◆", 4: "▲", 3: "●", 2: "○", 1: "○" };
+
+  // ------------------------------------------------------------------ state
+  const hours = DATA.hours.map(t);
+  const events = DATA.events.map((e) => ({ ...e, t: t(e.ts) }));
+  const alerts = events.filter((e) => e.kind === "alert" || e.kind === "digest");
+  const firstAlerts = alerts.filter((e) => !e.realert);
+  const gateAlerts = firstAlerts.filter((e) => e.kind === "alert" && e.severity >= 4);
+  const ev = DATA.evaluation;
+  const state = { i: 0, playing: false, timer: null, focus: null, expanded: null, decisions: {}, gated: new Set(), tables: {} };
+  const scrub = $("scrub");
+  scrub.max = hours.length - 1;
+
+  // ------------------------------------------------------------------ header
+  const m = DATA.meta;
+  $("dataLabel").textContent = m.label;
+  $("metaLine").textContent = `${m.marketplace} · ${fmtDay(t(m.start))} – ${fmtDay(t(m.end))} · ${m.advertisers} advertisers · ${m.sources} supply sources · specialist routing: ${m.routing.join(", ") || "n/a"}`;
+  $("footLabel").textContent = `${m.label} · generated ${m.generated}`;
+  if (!ev) { $("scoreCard").hidden = true; $("truthToggle").parentElement.hidden = true; }
+
+  // ------------------------------------------------------------------ chart
+  function niceMax(v) {  // 4 gridline steps, each a "nice" number
+    if (!(v > 0)) return 1;
+    const raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p;
+    const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((c) => n <= c + 1e-9) * p;
+    return step * 4;
+  }
+
+  function lineChart(host, cfg) {
+    host.textContent = "";
+    const W = Math.max(host.clientWidth, 280), H = cfg.height || 220;
+    const M = { l: 54, r: 14, t: cfg.markers ? 38 : 10, b: 26 };
+    const pw = W - M.l - M.r, ph = H - M.t - M.b;
+    const ts = cfg.ts, t0 = ts[0], t1 = ts[ts.length - 1] + (cfg.day ? 24 * HOUR - HOUR : 0);
+    const x = (v) => M.l + ((v - t0) / Math.max(t1 - t0, 1)) * pw;
+    let ymax = 0;
+    cfg.series.forEach((s) => s.values.forEach((v) => { if (v != null && v > ymax) ymax = v; }));
+    ymax = niceMax(ymax * 1.05);
+    const y = (v) => M.t + ph - (v / ymax) * ph;
+    const visible = (k) => (cfg.day ? ts[k] + 23 * HOUR : ts[k]) <= cfg.cursor;
+    const fmt = FMT[cfg.fmt] || FMT.int;
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": cfg.aria || "line chart" });
+
+    // bands
+    (cfg.bands || []).forEach((b) => {
+      // known events are known in advance; injected ground truth is only revealed up to the replay cursor
+      const endT = b.kind === "known_event" ? t(b.end) : Math.min(t(b.end), cfg.cursor + HOUR);
+      const a = Math.max(x(t(b.start)), M.l), z = Math.min(x(endT), M.l + pw);
+      if (z <= a) return;
+      svg.appendChild(sv("rect", { x: a, y: M.t, width: z - a, height: ph, fill: b.kind === "known_event" ? "var(--band-event)" : "var(--band-injected)" }));
+      if (z - a > 46 && cfg.bandLabels && b.kind === "known_event") {
+        const tx = sv("text", { x: a + 4, y: M.t + 12 });
+        tx.textContent = "known event";
+        svg.appendChild(tx);
+      }
+    });
+    // grid + y labels
+    for (let g = 0; g <= 4; g++) {
+      const v = (ymax / 4) * g, yy = y(v);
+      svg.appendChild(sv("line", { x1: M.l, x2: M.l + pw, y1: yy, y2: yy, stroke: g === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }));
+      const tx = sv("text", { x: M.l - 8, y: yy + 4, "text-anchor": "end" });
+      tx.textContent = fmt(v);
+      svg.appendChild(tx);
+    }
+    // x ticks
+    const span = t1 - t0;
+    const step = cfg.day ? 24 * HOUR : span > 5 * 24 * HOUR ? 24 * HOUR : 12 * HOUR;
+    const first = new Date(t0); first.setMinutes(0, 0, 0);
+    if (step >= 24 * HOUR) first.setHours(0); else first.setHours(first.getHours() < 12 ? 12 : 24);
+    let lastLabelX = -1e9;
+    for (let tt = first.getTime(); tt <= t1; tt += step) {
+      const xx = x(tt);
+      if (xx < M.l - 1) continue;
+      svg.appendChild(sv("line", { x1: xx, x2: xx, y1: M.t + ph, y2: M.t + ph + 4, stroke: "var(--axis)" }));
+      const lab = step >= 24 * HOUR ? fmtDay(tt + (cfg.day ? 0 : 12 * HOUR)).replace(/\.$/, "") : (new Date(tt).getHours() === 0 ? fmtDay(tt).replace(/\.$/, "") : "12:00");
+      if (xx - lastLabelX < 58) continue;
+      const tx = sv("text", { x: step >= 24 * HOUR && !cfg.day ? x(tt + 12 * HOUR) : xx, y: H - 6, "text-anchor": "middle" });
+      tx.textContent = lab;
+      svg.appendChild(tx);
+      lastLabelX = xx;
+    }
+    // series (baseline first, actual on top)
+    const order = [...cfg.series].sort((a, b) => (a.role === "actual") - (b.role === "actual"));
+    const xs = (k) => (cfg.day ? x(ts[k] + 12 * HOUR) : x(ts[k]));
+    order.forEach((s) => {
+      let d = "", pen = false, lastK = -1;
+      s.values.forEach((v, k) => {
+        if (v == null || !visible(k)) { pen = false; return; }
+        d += `${pen ? "L" : "M"}${xs(k).toFixed(1)},${y(v).toFixed(1)}`; pen = true; lastK = k;
+      });
+      if (!d) return;
+      svg.appendChild(sv("path", { d, fill: "none", stroke: s.role === "actual" ? "var(--series-1)" : "var(--baseline)",
+        "stroke-width": s.role === "actual" ? 2 : 1.5, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      if (cfg.day && s.role === "actual") s.values.forEach((v, k) => {
+        if (v != null && visible(k)) svg.appendChild(sv("circle", { cx: xs(k), cy: y(v), r: 4, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2 }));
+      });
+      if (s.role === "actual" && lastK >= 0 && cfg.endLabel) {
+        const tx = sv("text", { x: Math.min(xs(lastK) + 6, M.l + pw - 2), y: y(s.values[lastK]) - 6, "text-anchor": xs(lastK) > M.l + pw - 60 ? "end" : "start" });
+        tx.textContent = fmt(s.values[lastK]); tx.style.fill = "var(--ink)"; tx.style.fontWeight = "600";
+        svg.appendChild(tx);
+      }
+    });
+    // markers: suppressed detections as one hollow strip per contiguous run, alerts drawn on top
+    const supRuns = [];
+    (cfg.markers || []).filter((mk) => mk.kind === "suppressed" && mk.t <= cfg.cursor && mk.t >= t0 && mk.t <= t1)
+      .sort((a, b) => a.t - b.t).forEach((mk) => {
+        const r = supRuns[supRuns.length - 1];
+        if (r && mk.t - r.end <= HOUR) { r.end = mk.t; r.n += mk.count; } else supRuns.push({ start: mk.t, end: mk.t, n: mk.count });
+      });
+    supRuns.forEach((r) => {
+      const a = x(r.start) - 4, w = Math.max(x(r.end) - x(r.start) + 8, 8);
+      svg.appendChild(sv("rect", { x: a, y: M.t - 34, width: w, height: 8, rx: 4, fill: "var(--surface)", stroke: "var(--muted)", "stroke-width": 1.5 }));
+      { const right = a + w + 6 < M.l + pw - 80; const tx = sv("text", { x: right ? a + w + 6 : a - 6, y: M.t - 26, "text-anchor": right ? "start" : "end" }); tx.textContent = `${r.n} suppressed`; svg.appendChild(tx); }
+    });
+    (cfg.markers || []).forEach((mk) => {
+      if (mk.t > cfg.cursor || mk.t < t0 || mk.t > t1) return;
+      const cx = x(mk.t), cy = M.t - 10;
+      if (mk.kind === "suppressed") return;
+      {
+        svg.appendChild(sv("line", { x1: cx, x2: cx, y1: cy, y2: M.t + ph, stroke: `var(--${mk.sev >= 5 ? "critical" : mk.sev === 4 ? "serious" : "warning"})`, "stroke-width": 1, opacity: .55 }));
+        svg.appendChild(sv("circle", { cx, cy, r: 6, fill: `var(--${mk.sev >= 5 ? "critical" : mk.sev === 4 ? "serious" : "warning"})`, stroke: "var(--surface)", "stroke-width": 2 }));
+        const tx = sv("text", { x: cx + 9, y: cy + 4 }); tx.textContent = mk.label; tx.style.fill = "var(--ink-2)";
+        svg.appendChild(tx);
+      }
+    });
+    // cursor
+    if (!cfg.day && cfg.cursor >= t0 && cfg.cursor <= t1) {
+      svg.appendChild(sv("line", { x1: x(cfg.cursor), x2: x(cfg.cursor), y1: M.t, y2: M.t + ph, stroke: "var(--ink-2)", "stroke-width": 1, opacity: .35 }));
+    }
+    // hover layer
+    const cross = sv("line", { y1: M.t, y2: M.t + ph, stroke: "var(--ink-2)", "stroke-width": 1, visibility: "hidden" });
+    svg.appendChild(cross);
+    const dots = cfg.series.map((s) => { const c = sv("circle", { r: 4, fill: s.role === "actual" ? "var(--series-1)" : "var(--baseline)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }); svg.appendChild(c); return c; });
+    const hit = sv("rect", { x: M.l, y: 0, width: pw, height: M.t + ph, fill: "transparent" });
+    svg.appendChild(hit);
+    host.appendChild(svg);
+    const tip = el("div", "tip"); tip.hidden = true; host.appendChild(tip);
+    const nearest = (px) => {
+      let best = -1, bd = 1e9;
+      ts.forEach((_, k) => { if (!visible(k)) return; const dd = Math.abs(xs(k) - px); if (dd < bd) { bd = dd; best = k; } });
+      return best;
+    };
+    hit.addEventListener("mousemove", (e) => {
+      const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * W;
+      const k = nearest(px);
+      if (k < 0) { tip.hidden = true; return; }
+      const xx = xs(k);
+      cross.setAttribute("x1", xx); cross.setAttribute("x2", xx); cross.setAttribute("visibility", "visible");
+      tip.textContent = "";
+      tip.appendChild(el("div", "t", cfg.day ? fmtDay(ts[k]) : fmtTime(ts[k])));
+      cfg.series.forEach((s, j) => {
+        const v = s.values[k];
+        if (v == null) { dots[j].setAttribute("visibility", "hidden"); return; }
+        dots[j].setAttribute("cx", xx); dots[j].setAttribute("cy", y(v)); dots[j].setAttribute("visibility", "visible");
+        const row = el("div", "row"); const nm = el("span", null, s.name); const val = el("b", null, fmt(v));
+        row.append(nm, val); tip.appendChild(row);
+      });
+      (cfg.markers || []).filter((mk) => mk.kind !== "suppressed" && Math.abs(mk.t - ts[k]) < HOUR / 2 && mk.t <= cfg.cursor)
+        .forEach((mk) => tip.appendChild(el("div", "evline", `${SEV_ICON[mk.sev]} SEV ${mk.sev} ${mk.title}`)));
+      const sup = (cfg.markers || []).filter((mk) => mk.kind === "suppressed" && Math.abs(mk.t - ts[k]) < HOUR / 2 && mk.t <= cfg.cursor);
+      if (sup.length) tip.appendChild(el("div", "evline", `○ ${sup[0].count} detection(s) suppressed: ${sup[0].reason}`));
+      tip.hidden = false;
+      const hostW = host.clientWidth, left = (xx / W) * hostW;
+      tip.style.left = Math.min(Math.max(left + 12, 0), hostW - tip.offsetWidth - 4) + "px";
+      tip.style.top = "4px";
+    });
+    hit.addEventListener("mouseleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); });
+  }
+
+  function tableFor(host, cfg) {
+    host.textContent = "";
+    const fmt = FMT[cfg.fmt] || FMT.int;
+    const tbl = el("table"), thead = el("thead"), tr = el("tr");
+    tr.appendChild(el("th", null, cfg.day ? "Day" : "Hour"));
+    cfg.series.forEach((s) => tr.appendChild(el("th", "num", s.name)));
+    thead.appendChild(tr); tbl.appendChild(thead);
+    const tb = el("tbody");
+    cfg.ts.forEach((tt, k) => {
+      if ((cfg.day ? tt + 23 * HOUR : tt) > cfg.cursor) return;
+      const r = el("tr"); r.appendChild(el("td", null, cfg.day ? fmtDay(tt) : fmtTime(tt)));
+      cfg.series.forEach((s) => r.appendChild(el("td", "num", s.values[k] == null ? "–" : fmt(s.values[k]))));
+      tb.appendChild(r);
+    });
+    tbl.appendChild(tb);
+    if (cfg.title) host.appendChild(el("div", "sm-title", cfg.title));
+    host.appendChild(tbl);
+  }
+
+  function legend(host, series, withBands) {
+    host.textContent = "";
+    series.forEach((s) => {
+      const it = el("span"); const sw = el("i"); sw.style.background = s.role === "actual" ? "var(--series-1)" : "var(--baseline)";
+      it.append(sw, document.createTextNode(s.name)); host.appendChild(it);
+    });
+    if (withBands) {
+      const a = el("span"); const sa = el("i", "bandkey"); sa.style.background = "var(--band-event)"; a.append(sa, document.createTextNode("known event")); host.appendChild(a);
+      if (ev && $("truthToggle").checked) { const b = el("span"); const sb = el("i", "bandkey"); sb.style.background = "var(--band-injected)"; b.append(sb, document.createTextNode("injected scenario (ground truth)")); host.appendChild(b); }
+    }
+  }
+
+  // ------------------------------------------------------------------ render
+  const cursor = () => hours[state.i];
+  const ovSeries = [
+    { name: "All advertisers", role: "actual", values: DATA.overview.actual },
+    { name: "Same hour last week", role: "baseline", values: DATA.overview.baseline },
+  ];
+  function markers() {
+    const out = firstAlerts.map((a) => ({ t: a.t, kind: "alert", sev: a.severity, label: a.signal, title: `${a.signal} ${a.entity}` }));
+    const sup = {};
+    events.filter((e) => e.kind === "suppressed").forEach((e) => { (sup[e.t] = sup[e.t] || { t: e.t, kind: "suppressed", count: 0, reason: e.reason }).count++; });
+    return out.concat(Object.values(sup));
+  }
+  const MARKERS = markers();
+
+  function bands() { return DATA.bands.filter((b) => b.kind === "known_event" || (ev && $("truthToggle").checked)); }
+
+  function renderOverview() {
+    const cfg = { ts: hours, series: ovSeries, fmt: "eur", cursor: cursor(), bands: bands(), markers: MARKERS, height: 250, bandLabels: true, endLabel: true, aria: "Marketplace spend per hour vs last week" };
+    legend($("ovLegend"), ovSeries, true);
+    lineChart($("overview"), cfg);
+    if (state.tables.overview) tableFor($("overview-table"), cfg);
+  }
+
+  function renderFocus() {
+    const host = $("focus");
+    const a = state.focus && alerts.find((e) => e.anomaly_id === state.focus && e.t <= cursor());
+    if (!a) {
+      host.textContent = ""; host.appendChild(el("div", "empty", "No alert yet. Press Play or jump to the next event."));
+      $("fcHead").textContent = ""; $("fcSub").textContent = "click an alert in the feed"; $("focus-table").hidden = true; return;
+    }
+    const f = DATA.focus[a.anomaly_id];
+    $("fcTitle").textContent = `Anomaly in focus: ${f.name}`;
+    $("fcSub").textContent = `${a.anomaly_id} · detected ${fmtTime(a.t)}`;
+    $("fcHead").textContent = a.headline || "";
+    host.textContent = "";
+    const grid = el("div", "small-multiples");
+    const tbls = el("div");
+    f.charts.forEach((c, j) => {
+      const box = el("div"); box.appendChild(el("div", "sm-title", c.title + (c.unit && c.fmt !== "pct" && !c.fmt.startsWith("eur") ? ` (${c.unit})` : "")));
+      if (c.series.length > 1) { const lg = el("div", "legend"); legend(lg, c.series, false); box.appendChild(lg); }
+      const ch = el("div", "chart"); box.appendChild(ch);
+      if (c.note) box.appendChild(el("div", "note", c.note));
+      grid.appendChild(box);
+      const cts = c.ts.map(t);
+      const day = c.ts.length > 1 && cts[1] - cts[0] >= 24 * HOUR;
+      const cfg = { ts: cts, series: c.series, fmt: c.fmt, cursor: cursor(), day, height: 190, title: c.title, endLabel: true,
+        bands: bands().filter((b) => b.kind === "known_event" || (b.signal === f.signal)),
+        markers: [{ t: a.t, kind: "alert", sev: a.severity, label: "alert", title: `${a.signal} ${a.entity}` }], aria: c.title };
+      requestAnimationFrame(() => lineChart(ch, cfg));
+      if (state.tables.focus) { const tb = el("div"); tableFor(tb, cfg); tbls.appendChild(tb); }
+    });
+    host.appendChild(grid);
+    if (state.tables.focus) { $("focus-table").textContent = ""; $("focus-table").appendChild(tbls); }
+  }
+
+  function sevBadge(s) { const b = el("span", `sev s${s}`); b.textContent = `${SEV_ICON[s] || ""} SEV ${s}`; return b; }
+
+  function whyLine(text) {
+    const m = /Why \(most likely\): (.*)/.exec(text || "");
+    return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "") : "";
+  }
+
+  function renderFeed() {
+    const host = $("feed"), now = cursor();
+    host.textContent = "";
+    const shown = events.filter((e) => e.t <= now);
+    if (!shown.length) { host.appendChild(el("div", "empty", "Waiting for the first event…")); return; }
+    // group suppressed per day + reason
+    const items = [], supGroups = {};
+    shown.forEach((e) => {
+      if (e.kind === "suppressed") {
+        const key = new Date(e.t).toDateString() + "|" + e.reason;
+        if (!supGroups[key]) { supGroups[key] = { kind: "supgroup", t: e.t, last: e.t, reason: e.reason, title: e.title, n: 0, ents: new Set(), signal: e.signal }; items.push(supGroups[key]); }
+        const g = supGroups[key]; g.n++; g.last = e.t; g.ents.add(e.entity);
+      } else items.push(e);
+    });
+    items.sort((a, b) => (b.last || b.t) - (a.last || a.t));
+    items.forEach((e) => {
+      if (e.kind === "supgroup") {
+        const c = el("div", "ev muted");
+        const r1 = el("div", "row1"); r1.append(el("span", "chip", "SUPPRESSED"), el("span", "when", `${fmtTime(e.t)} – ${fmtTime(e.last).slice(-5)}`));
+        c.append(r1, el("div", "hl", `Self-check held back ${e.n} raw ${e.signal} detection${e.n > 1 ? "s" : ""} across ${e.ents.size} account${e.ents.size > 1 ? "s" : ""}`),
+          el("div", "why", `${e.reason}. Example: ${e.title}. Nobody was paged.`));
+        host.appendChild(c); return;
+      }
+      if (e.kind === "resolved") {
+        const c = el("div", "ev muted"); const r1 = el("div", "row1");
+        r1.append(el("span", "chip", "RESOLVED"), el("span", "when", fmtTime(e.t)));
+        c.append(r1, el("div", "hl", `${e.anomaly_id} back in range (2 consecutive checks)`)); host.appendChild(c); return;
+      }
+      if (e.kind !== "alert" && e.kind !== "digest") return;
+      const c = el("div", "ev" + (state.focus === e.anomaly_id ? " sel" : "")); c.tabIndex = 0;
+      const r1 = el("div", "row1"); r1.append(sevBadge(e.severity), el("span", "when", fmtTime(e.t)));
+      c.append(r1, el("div", "hl", e.headline.replace(/^\[SEV \d\] /, "")), el("div", "why", whyLine(e.text)));
+      const chips = el("div", "chips");
+      (e.specialists || []).forEach((s) => chips.appendChild(el("span", "chip", `${s.skill} · ${s.stance ? s.stance.replace("_", " ") : "?"}`)));
+      if (e.disagreement) chips.appendChild(el("span", "chip dis", "⚑ specialists disagree"));
+      const live = state.decisions[e.anomaly_id];
+      if (e.severity >= 4) chips.appendChild(el("span", "chip", live ? `decision ${live} (live)` : e.decision ? `decision ${e.decision} (replay)` : "decision pending"));
+      c.appendChild(chips);
+      if (state.expanded === e.anomaly_id + e.ts) c.appendChild(el("pre", null, e.text));
+      const pick = () => { state.focus = e.anomaly_id; state.expanded = state.expanded === e.anomaly_id + e.ts ? null : e.anomaly_id + e.ts; renderFeed(); renderFocus(); };
+      c.addEventListener("click", pick);
+      c.addEventListener("keydown", (k) => { if (k.key === "Enter") pick(); });
+      host.appendChild(c);
+    });
+  }
+
+  function renderKpis() {
+    const now = cursor();
+    const raised = firstAlerts.filter((a) => a.kind === "alert" && a.t <= now);
+    $("kAlerts").textContent = raised.length;
+    const bySev = [5, 4, 3].map((s) => `${raised.filter((a) => a.severity === s).length}× SEV ${s}`).join(" · ");
+    $("kAlertsS").textContent = raised.length ? bySev : "SEV ≥ 3 notifications";
+    $("kSup").textContent = events.filter((e) => e.kind === "suppressed" && e.t <= now).length;
+    if (!ev) { ["kDet", "kFa", "kTtd"].forEach((k) => ($(k).textContent = "–")); $("kDetS").textContent = "no ground truth (live data)"; return; }
+    const started = ev.scenarios.filter((s) => s.expected === "detect" && t(s.start) <= now);
+    const det = started.filter((s) => s.detected_ts && t(s.detected_ts) <= now);
+    $("kDet").textContent = `${det.length} / ${started.length}`;
+    $("kDetS").textContent = `of ${ev.summary.injected} injected scenarios so far`;
+    const fa = ev.unmatched.filter((u) => t(u.ts) <= now).length;
+    $("kFa").textContent = fa;
+    const holiday = ev.scenarios.find((s) => s.expected === "suppress");
+    $("kFaS").textContent = holiday && t(holiday.start) <= now ? (holiday.false_alarms ? "holiday dip was NOT suppressed" : "holiday dip suppressed by self-check") : "alerts with no injected cause";
+    const ttds = det.map((s) => s.ttd_h).sort((a, b) => a - b);
+    $("kTtd").textContent = ttds.length ? `${Math.round(ttds.length % 2 ? ttds[(ttds.length - 1) / 2] : (ttds[ttds.length / 2 - 1] + ttds[ttds.length / 2]) / 2)} h` : "–";
+    $("kTtdS").textContent = ttds.length ? `min ${Math.round(ttds[0])} h · max ${Math.round(ttds[ttds.length - 1])} h` : "injection → first alert";
+  }
+
+  function renderScore() {
+    if (!ev) return;
+    const tbl = $("score"), now = cursor(), truth = $("truthToggle").checked;
+    tbl.textContent = "";
+    const h = el("tr");
+    ["Scenario", "Signal", "Entity", "Injected", "Expected", "Result", "Time to detect"].forEach((c, k) => h.appendChild(el("th", k === 6 ? "num" : null, c)));
+    const thead = el("thead"); thead.appendChild(h); tbl.appendChild(thead);
+    const tb = el("tbody");
+    ev.scenarios.forEach((s) => {
+      const r = el("tr");
+      const st = t(s.start), en = t(s.end);
+      let res, cls, ttd = "–";
+      if (s.expected === "detect") {
+        if (s.detected_ts && t(s.detected_ts) <= now) { res = `✓ Detected ${fmtTime(t(s.detected_ts))} · SEV ${s.severity}`; cls = "ok"; ttd = `${Math.round(s.ttd_h)} h`; }
+        else if (st <= now) { res = s.detected_ts ? "… running" : "✗ Missed"; cls = s.detected_ts ? "pending" : "bad"; }
+        else { res = "not started"; cls = "pending"; }
+      } else {
+        if (en <= now) { res = s.false_alarms ? `✗ False alarm ×${s.false_alarms}` : `✓ Suppressed (${s.suppressed_count} detections, ${s.suppressed_entities} accounts)`; cls = s.false_alarms ? "bad" : "ok"; }
+        else if (st <= now) { res = "… running"; cls = "pending"; } else { res = "not started"; cls = "pending"; }
+        ttd = "n/a";
+      }
+      const name = truth ? s.id.replace(/_/g, " ") : (st <= now ? s.id.replace(/_/g, " ") : "hidden");
+      [name, s.signal, s.entity === "*" ? "all" : s.entity, fmtTime(st), s.expected].forEach((v) => r.appendChild(el("td", null, v)));
+      const rc = el("td"); rc.appendChild(el("span", `status ${cls}`, res)); r.appendChild(rc);
+      r.appendChild(el("td", "num", ttd));
+      tb.appendChild(r);
+    });
+    tbl.appendChild(tb);
+  }
+
+  function renderAll() {
+    scrub.value = state.i;
+    $("clock").querySelector("span").textContent = fmtTime(cursor());
+    renderKpis(); renderOverview(); renderFeed(); renderFocus(); renderScore();
+  }
+
+  // ------------------------------------------------------------------ gate
+  function openGate(a) {
+    $("gate").hidden = false;
+    $("gatePage").hidden = a.severity < 5;
+    $("gateWhen").textContent = `${fmtTime(a.t)} · ${a.anomaly_id}`;
+    $("gateTitle").textContent = a.headline;
+    $("gateText").textContent = a.text;
+    const box = $("gateChoices"); box.textContent = "";
+    ["A", "B"].forEach((opt) => {
+      const b = el("button", "choice" + (a.recommended === opt ? " rec" : ""));
+      const bl = el("b", null, `Option ${opt}${a.recommended === opt ? " · recommended" : ""}`);
+      b.append(bl, document.createTextNode(a.options ? a.options[opt] : ""));
+      b.addEventListener("click", () => { state.decisions[a.anomaly_id] = opt; closeGate(true); });
+      box.appendChild(b);
+    });
+    $("gateNote").textContent = `Staged only: nothing is executed. Replay run recorded option ${a.decision || "–"}. Esc closes without deciding.`;
+    box.querySelector(".rec, .choice").focus();
+  }
+  function closeGate(resume) { $("gate").hidden = true; renderAll(); if (resume) play(); }
+
+  // ------------------------------------------------------------------ playback
+  function stepTo(i) {
+    const prev = state.i;
+    state.i = Math.max(0, Math.min(hours.length - 1, i));
+    if (state.playing && $("gateToggle").checked) {
+      const hit = gateAlerts.find((a) => a.t > hours[prev] && a.t <= hours[state.i] && !state.gated.has(a.anomaly_id));
+      if (hit) {
+        state.i = hours.indexOf(hit.t); state.gated.add(hit.anomaly_id); state.focus = hit.anomaly_id;
+        pause(); renderAll(); openGate(hit); return;
+      }
+    }
+    const newest = firstAlerts.filter((a) => a.t <= hours[state.i]).pop();
+    if (newest && (state.playing || state.i > prev)) state.focus = newest.anomaly_id;
+    renderAll();
+  }
+  function tick() { if (state.i >= hours.length - 1) return pause(); stepTo(state.i + 1); }
+  function play() {
+    if (state.playing) return;
+    if (state.i >= hours.length - 1) state.i = 0;
+    state.playing = true; $("play").textContent = "❚❚ Pause";
+    state.timer = setInterval(tick, 1000 / Number($("speed").value));
+  }
+  function pause() { state.playing = false; clearInterval(state.timer); $("play").textContent = "▶ Play"; }
+  function nextEvent() {
+    const now = cursor();
+    const nxt = events.find((e) => e.t > now && e.kind !== "resolved");
+    pause();
+    if (nxt) { state.i = hours.indexOf(nxt.t); const a = firstAlerts.find((x) => x.t === nxt.t); if (a) state.focus = a.anomaly_id; }
+    renderAll();
+  }
+
+  $("play").addEventListener("click", () => (state.playing ? pause() : play()));
+  $("next").addEventListener("click", nextEvent);
+  $("end").addEventListener("click", () => { pause(); state.i = hours.length - 1; state.focus = (firstAlerts[firstAlerts.length - 1] || {}).anomaly_id || null; renderAll(); });
+  $("reset").addEventListener("click", () => { pause(); state.i = 0; state.focus = null; state.expanded = null; state.gated.clear(); state.decisions = {}; renderAll(); });
+  $("speed").addEventListener("change", () => { if (state.playing) { pause(); play(); } });
+  scrub.addEventListener("input", () => { pause(); stepTo(Number(scrub.value)); });
+  $("truthToggle").addEventListener("change", renderAll);
+  document.querySelectorAll("[data-table]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.table; state.tables[k] = !state.tables[k];
+    $(k + "-table").hidden = !state.tables[k]; b.textContent = state.tables[k] ? "Chart only" : "Table";
+    renderAll();
+  }));
+  document.addEventListener("keydown", (e) => {
+    if (!$("gate").hidden) { if (e.key === "Escape") closeGate(false); return; }
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key === " ") { e.preventDefault(); state.playing ? pause() : play(); }
+    else if (e.key === "ArrowRight") { pause(); stepTo(state.i + 1); }
+    else if (e.key === "ArrowLeft") { pause(); stepTo(state.i - 1); }
+    else if (e.key.toLowerCase() === "n") nextEvent();
+  });
+  let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(renderAll, 120); });
+
+  // deep links: #t=end | #t=2026-11-13T11:00 (presenter shortcuts)
+  const hm = /t=([^&]+)/.exec(location.hash);
+  if (hm) {
+    const v = decodeURIComponent(hm[1]);
+    const target = v === "end" ? hours[hours.length - 1] : t(v);
+    const k = hours.findIndex((h) => h >= target);
+    state.i = k < 0 ? hours.length - 1 : k;
+    const last = firstAlerts.filter((a) => a.t <= hours[state.i]).pop();
+    state.focus = last ? last.anomaly_id : null;
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>

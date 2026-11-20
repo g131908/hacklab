@@ -94,7 +94,8 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                              specialists=[dict(skill=s["skill"], source=s.get("source"),
                                                stance=s.get("stance"), diagnosis=s.get("diagnosis"))
                                           for s in specialists],
-                             disagreement=al["disagreement"]))
+                             disagreement=al["disagreement"], headline=al["headline"],
+                             text=al["text"], options=al["options"], recommended=al["recommended"]))
 
     state.save()
     state.log_run(now, len(dets), fired, alerted, suppressed)

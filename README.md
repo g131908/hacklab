@@ -48,7 +48,25 @@ python src\generate_demo_data.py   # 14 Tage stündliche DEMO DATA -> data\*.csv
 python src\replay.py               # Stunde für Stunde abspielen, Alarme + A/B-Entscheidung bei SEV>=4
 python src\replay.py --auto A      # ohne Rückfrage, wählt immer Option A (für Tests/CI)
 python src\evaluate.py             # injected / detected / false alarms / time-to-detect
+python src\dashboard.py --open     # Demo-Dashboard -> dashboard\index.html (offline, Doppelklick reicht)
 ```
+
+## Demo-Dashboard
+
+`dashboard\index.html` ist eine einzelne Datei ohne Internet-Abhängigkeit. Sie wird aus dem letzten Replay erzeugt,
+also nach jedem `replay.py` neu bauen.
+
+- **Play** spielt die 14 Tage ab (Tempo 6–48 h/s). Bei SEV ≥ 4 pausiert es mit der A/B-Entscheidung
+  (bei SEV 5 mit Paging-Banner). Die Wahl wird nur angezeigt, nichts wird ausgeführt.
+- **Next event** springt zum nächsten Alarm oder zur nächsten Unterdrückung, ideal für eine kurze Demo.
+- **Show ground truth** blendet die injizierten Szenarien ein, und zwar nur bis zur aktuellen Replay-Zeit.
+- Deep Links: `index.html#t=end`, `index.html#t=2026-11-18T07:00` (Feiertag, Unterdrückung).
+- Tasten: `Space` Play/Pause, `←`/`→` ±1 h, `N` nächstes Event, `Esc` Dialog schließen.
+- Jede Grafik hat eine Tabellenansicht, Hell-/Dunkelmodus folgt dem System.
+
+Demo-Ablauf (ca. 3 Min.): Reset → Play → Tracking-Break (SEV 5, Entscheidung A) → Klickbetrug
+→ Runaway Spend → Feiertag: „115 suppressed“, niemand wird gepaged → Creative Fatigue mit
+Specialist-Widerspruch → End: Scorecard 4/4, 0 Fehlalarme.
 
 ## Struktur
 
@@ -57,6 +75,8 @@ src/
   generate_demo_data.py   synthetische Daten + 5 Szenarien (DEMO DATA)
   replay.py               stündlicher Replay durch die Pipeline
   evaluate.py             Vergleich Alarme vs. data/injected.json
+  dashboard.py            baut dashboard/index.html aus Daten + Alarm-Log + Ground Truth
+  dashboard_template.html Dashboard-UI (Vanilla JS/SVG, keine externen Abhängigkeiten)
   monitor/
     loader.py             Datenquelle (CSV, später austauschbar gegen API)
     detectors.py          S1 Pacing, S4 Tracking-Break, S6 Creative Fatigue, S7 Fraud
