@@ -33,6 +33,7 @@ class State:
         for p in (self.anomalies_path, self.alerts_path, self.runs_path):
             if p.exists():
                 p.unlink()
+        self.alerts_path.touch()  # an empty log is a valid state (dashboard, evaluate)
         self.save()
 
     def save(self) -> None:
