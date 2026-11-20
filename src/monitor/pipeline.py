@@ -1,22 +1,30 @@
 """One monitoring run: WATCH -> SELF-CHECK -> TRIAGE -> ROUTE -> SYNTHESIZE -> GATE -> LOG.
-Shared by replay.py (demo) and a future live loop."""
+Shared by replay.py (demo) and a future live loop. Every fired detection carries an agent
+trace (monitor/trace.py) that is written to the log alongside the alert or suppression."""
 from __future__ import annotations
 
+import time
 from typing import Callable
 
 import pandas as pd
 
 from . import alert as alert_mod
+from . import trace as tr_mod
 from .detectors import run_detectors
 from .loader import MarketData
-from .routing import Router
+from .routing import Router, specialists_for
 from .selfcheck import check, dedupe, freshness
 from .state import State
 from .triage import SIGNALS, action_for, score
 
-# notify(alert_dict) shows the alert; decide(alert_dict) -> "A" | "B", only for SEV >= 4 (the GATE)
+# notify(alert_dict) shows the alert; decide(alert_dict) -> "A" | "B", only for SEV >= 4 (the GATE).
+# A decider may carry a `mode` attribute ("terminal", "auto") that the trace records as decided_by.
 Notifier = Callable[[dict], None]
 Decider = Callable[[dict], str]
+
+
+def _ms(t0: float) -> float:
+    return round((time.perf_counter() - t0) * 1000, 2)
 
 
 def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
@@ -34,6 +42,7 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         state.log_run(now, 0, 0, 1, 0, note="stale data")
         return [ev]
 
+    t0 = time.perf_counter()
     try:
         dets = run_detectors(data, now, cfg)
     except Exception as exc:  # a silent monitor is worse than a noisy one
@@ -41,11 +50,14 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         state.log_event(dict(event="alert", **ev))
         state.log_run(now, 0, 0, 1, 0, errors=1, note=repr(exc))
         return [ev]
+    detect_ms = _ms(t0)
 
     router = router or Router(cfg)
     fired = alerted = suppressed = 0
     for det in dets:
+        t0 = time.perf_counter()
         res = check(det, fresh, cfg)
+        check_ms = _ms(t0)
         if not det.fired:
             if res.verdict == "alert":  # measurable and in range -> auto-resolve counter
                 rec = state.mark_in_range(det.signal, det.entity, now, cfg["auto_resolve_checks"])
@@ -54,38 +66,62 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                     state.log_event(dict(event="resolved", ts=now, anomaly_id=rec["anomaly_id"],
                                          signal=det.signal, entity=det.entity))
             continue
+
         fired += 1
+        tr = tr_mod.Trace()
+        tr_mod.detect_step(tr, det, detect_ms, len(dets))
+        tr_mod.selfcheck_step(tr, res, check_ms)
         if res.verdict != "alert":
             suppressed += 1
+            tr_mod.log_step(tr, None, " as suppressed (counts toward the false-alarm check)")
+            tr.skip_rest("not run: self-check stopped the pipeline")
             ev = dict(type="suppressed", ts=now, signal=det.signal, entity=det.entity,
                       reason=res.reason, title=det.title, checks=res.checks)
             events.append(ev)
-            state.log_event(dict(event="suppressed", ts=now, signal=det.signal,
-                                 entity=det.entity, reason=res.reason, title=det.title))
+            state.log_event(dict(event="suppressed", ts=now, signal=det.signal, entity=det.entity,
+                                 reason=res.reason, title=det.title, trace=tr.to_list()))
             continue
 
+        t0 = time.perf_counter()
         sev, factors = score(det, cfg)
+        triage_ms = _ms(t0)
+        t0 = time.perf_counter()
         action, rec = dedupe(det, sev, state, now, cfg)
+        tr_mod.dedupe_step(tr, action, rec, _ms(t0))
         if action in ("cooldown", "update"):
             suppressed += 1
-            continue
+            continue  # same anomaly already alerted; not logged again (keeps the log one-per-alert)
+        tr_mod.triage_step(tr, sev, factors, triage_ms)
+
         if action_for(sev) == "page":  # SEV 5: page with the facts before the diagnosis is finished
             notify(dict(type="page", severity=sev, anomaly_id=rec["anomaly_id"],
                         text=(f"[{data.label}] " if data.label else "") +
                         f"PAGE [SEV 5] {SIGNALS[det.signal]['name']}: {det.entity} - {det.title}. "
                         f"Facts: {'; '.join(det.evidence)}. Diagnosis running..."))
-        specialists = router.route(det, sev, rec["anomaly_id"], data) if action_for(sev) != "log" else []
+        picks = specialists_for(det.signal, sev) if action_for(sev) != "log" else []
+        tr_mod.route_step(tr, router, picks, sev)
+        t0 = time.perf_counter()
+        specialists = router.route(det, sev, rec["anomaly_id"], data) if picks else []
+        tr_mod.specialists_step(tr, specialists, _ms(t0))
+
+        t0 = time.perf_counter()
         al = alert_mod.build(det, sev, factors, res.checks, specialists,
                              label=data.label, realert=(action == "realert"))
+        tr_mod.synth_step(tr, al, alert_mod._why(specialists), _ms(t0))
+
         decision = None
         kind = "digest" if action_for(sev) == "log" else "alert"
         notify(dict(type=kind, severity=sev, **al))
+        t0 = time.perf_counter()
         if kind == "alert":
             alerted += 1
             if sev >= 4:
                 decision = decide(al)
                 state.log_decision(rec["anomaly_id"], decision, al["options"][decision],
                                    ", ".join(cfg["notify"]["approvers"]), data.label)
+        tr_mod.gate_step(tr, sev, kind, decision, getattr(decide, "mode", "human"), _ms(t0))
+        tr_mod.log_step(tr, rec, ", decisions.md" if decision else "")
+
         events.append(dict(type=kind, ts=now, severity=sev, anomaly_id=rec["anomaly_id"],
                            text=al["text"], decision=decision, recommended=al["recommended"]))
         state.log_event(dict(event=kind, ts=now, anomaly_id=rec["anomaly_id"], signal=det.signal,
@@ -95,7 +131,8 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                                                stance=s.get("stance"), diagnosis=s.get("diagnosis"))
                                           for s in specialists],
                              disagreement=al["disagreement"], headline=al["headline"],
-                             text=al["text"], options=al["options"], recommended=al["recommended"]))
+                             text=al["text"], options=al["options"], recommended=al["recommended"],
+                             trace=tr.to_list()))
 
     state.save()
     state.log_run(now, len(dets), fired, alerted, suppressed)

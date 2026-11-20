@@ -114,6 +114,7 @@ td.num, th.num { text-align: right; }
 .chip { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--ink-2); }
 .chip.dis { color: var(--ink); font-weight: 600; }
 .ev.muted { cursor: default; color: var(--ink-2); border-style: dashed; }
+.ev.muted.clickable { cursor: pointer; }
 .ev.muted .hl { font-weight: 500; }
 .ev pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 8px 0 0; color: var(--ink); }
 .sev { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 1px 8px 1px 6px; border-radius: 999px; color: #fff; }
@@ -134,7 +135,52 @@ td.num, th.num { text-align: right; }
 .choice b { display: block; margin-bottom: 2px; }
 .choice.rec { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
 .gate-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+.trace-wrap { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+.trace-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.trace-h h3 { font-size: 14px; margin: 0; font-weight: 600; }
+.trace-h .sub { color: var(--muted); font-size: 12px; flex: 1 1 auto; }
+ol.trace { list-style: none; margin: 10px 0 0; padding: 0; }
+.step { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding-bottom: 12px; }
+.step::before { content: ""; position: absolute; left: 12px; top: 24px; bottom: 0; width: 2px; background: var(--grid); }
+.step:last-child::before { display: none; }
+.node { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); color: #fff; }
+.st-pass .node { background: var(--good); }
+.st-warn .node { background: var(--warning); color: #0b0b0b; }
+.st-stop .node { background: var(--ink); color: var(--surface); }
+.st-info .node { background: var(--series-1); }
+.st-skip .node { background: var(--chip); color: var(--muted); }
+.st-skip .step-body { color: var(--muted); }
+.step-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.step-top b { font-weight: 600; }
+.step-top .ms { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.step-top .stl { font-size: 11px; color: var(--ink-2); background: var(--chip); border-radius: 999px; padding: 0 7px; }
+.step .sum { font-size: 13px; color: var(--ink-2); margin-top: 1px; overflow-wrap: anywhere; }
+.st-stop .sum { color: var(--ink); font-weight: 600; }
+.step details { margin-top: 4px; }
+.step summary { cursor: pointer; font-size: 12px; color: var(--series-1); width: fit-content; }
+.step summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; font-size: 12.5px; margin: 6px 0 0; }
+.dl dt { color: var(--muted); }
+.dl dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.blist { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; }
+.blist li { margin: 2px 0; }
+.checks { list-style: none; padding: 0; margin: 6px 0 0; font-size: 12.5px; }
+.checks li { display: grid; grid-template-columns: 18px 150px minmax(0, 1fr); gap: 6px; padding: 2px 0; }
+.checks .ic { font-weight: 700; text-align: center; }
+.checks .c-pass .ic { color: var(--good-text); } .checks .c-stop .ic { color: var(--critical); }
+.checks .c-warn .ic { color: var(--ink-2); } .checks .c-skip { color: var(--muted); }
+.spec { border: 1px solid var(--grid); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.spec-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.spec-top b { font-weight: 600; }
+.spec h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
+.spec .q { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 2px; }
+.spec .dg { font-size: 13px; margin-top: 4px; }
+.conf { font-size: 11px; border-radius: 999px; padding: 0 6px; background: var(--chip); color: var(--ink-2); margin-left: 4px; }
+.opt { font-size: 12.5px; margin-top: 3px; }
+.opt.rec b::after { content: " · recommended"; color: var(--series-1); font-weight: 600; }
 footer { color: var(--muted); font-size: 12px; margin-top: 18px; }
+@media (max-width: 560px) { .checks li { grid-template-columns: 18px minmax(0, 1fr); } .checks li .res { grid-column: 2; } }
 kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--chip); }
 @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
@@ -210,6 +256,10 @@ kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); borde
           <div class="focus-head" id="fcHead"></div>
           <div id="focus"><div class="empty">No alert yet. Press Play or jump to the next event.</div></div>
           <div class="table-wrap" id="focus-table" hidden></div>
+          <div class="trace-wrap" id="traceWrap" hidden>
+            <div class="trace-h"><h3>Agent trace</h3><span class="sub" id="traceSub"></span><button class="btn" id="traceAll" type="button">Expand all</button></div>
+            <ol class="trace" id="trace"></ol>
+          </div>
         </div>
       </section>
 
@@ -488,17 +538,138 @@ const DATA = /*__DATA__*/null;
     if (state.tables.overview) tableFor($("overview-table"), cfg);
   }
 
+  // focus target: an alert (anomaly_id) or a suppressed group ("SUP|<date>|<reason>")
+  function focusTarget() {
+    if (!state.focus) return null;
+    const now = cursor();
+    if (state.focus.startsWith("SUP|")) {
+      const grp = events.filter((e) => e.group === state.focus && e.t <= now);
+      if (!grp.length) return null;
+      const first = grp[0];
+      return { key: state.focus, t: first.t, signal: first.signal, entity: first.entity, trace: first.trace,
+        headline: `Self-check held back ${grp.length} raw ${first.signal} detection${grp.length > 1 ? "s" : ""} across ${new Set(grp.map((g) => g.entity)).size} accounts`,
+        sub: `${first.reason} · first at ${fmtTime(first.t)} · trace shows ${first.entity}`, marker: { kind: "suppressed-focus" } };
+    }
+    const a = alerts.find((e) => e.anomaly_id === state.focus && e.t <= now);
+    if (!a) return null;
+    return { key: a.anomaly_id, t: a.t, signal: a.signal, entity: a.entity, trace: a.trace, alert: a,
+      headline: a.headline || "", sub: `${a.anomaly_id} · detected ${fmtTime(a.t)}` };
+  }
+
+  const STATUS_TEXT = { pass: "passed", warn: "passed with gap", stop: "stopped here", info: "staged", skip: "not run" };
+  const STATUS_ICON = { pass: "✓", warn: "!", stop: "■", info: "i", skip: "–" };
+  const CHECK_ICON = { pass: "✓", stop: "✗", warn: "?", skip: "–", info: "·" };
+
+  function dl(pairs) {
+    const d = el("dl", "dl");
+    pairs.forEach(([k, v]) => { if (v == null || v === "") return; d.append(el("dt", null, k), el("dd", null, String(v))); });
+    return d;
+  }
+  function blist(items) { const u = el("ul", "blist"); items.forEach((i) => u.appendChild(typeof i === "string" ? el("li", null, i) : i)); return u; }
+  const fmtNum = (v) => (typeof v === "number" ? (Math.abs(v) >= 100 ? nf0.format(v) : Math.abs(v) < 1 ? v.toFixed(4) : nf2.format(v)) : v);
+
+  function specCard(o) {
+    const c = el("div", "spec");
+    const top = el("div", "spec-top");
+    top.append(el("b", null, o.skill), el("span", "chip", (o.stance || "?").replace("_", " ")),
+      el("span", "ms", `${o.source || "?"}${o.ms != null ? " · " + nf2.format(o.ms) + " ms" : ""}`));
+    c.appendChild(top);
+    if (o.question) c.appendChild(el("div", "q", `Asked: ${o.question}`));
+    if (o.diagnosis) c.appendChild(el("div", "dg", o.diagnosis));
+    if (o.llm_error) c.appendChild(el("div", "q", `LLM call failed, rules used instead: ${o.llm_error}`));
+    if (o.evidence && o.evidence.length) { c.appendChild(el("h4", null, "Facts")); c.appendChild(blist(o.evidence)); }
+    if (o.hypotheses && o.hypotheses.length) {
+      c.appendChild(el("h4", null, "Hypotheses"));
+      c.appendChild(blist(o.hypotheses.map((h) => {
+        const li = el("li"); li.append(document.createTextNode(h.cause), el("span", "conf", h.confidence));
+        li.appendChild(el("div", "q", `Verify: ${h.how_to_verify}`)); return li;
+      })));
+    }
+    if (o.recommended_action) {
+      const r = o.recommended_action;
+      c.appendChild(el("h4", null, "Recommended action"));
+      c.appendChild(dl([["Action", r.action], ["Tier", r.tier === 2 ? "2 (needs human approval)" : "1 (autonomous)"],
+        ["Reversible", r.reversible ? "yes" : "no"], ["Impact", r.est_impact]]));
+    }
+    if (o.missing_data && o.missing_data.length) { c.appendChild(el("h4", null, "Missing data")); c.appendChild(blist(o.missing_data)); }
+    return c;
+  }
+
+  function stepDetail(s, target) {
+    const d = s.detail || {}, box = el("div");
+    if (s.key === "detect") {
+      box.appendChild(dl([["Signal", `${d.signal} on ${d.entity} (${d.entity_type})`], ["Window", (d.window || []).join(" → ")],
+        ["Direction", d.direction], ["Money at risk", d.money_note || "MISSING"], ["Detectors run this hour", d.detectors_run]]));
+      if (d.evidence) box.appendChild(blist(d.evidence));
+      if (d.metrics) box.appendChild(dl(Object.entries(d.metrics).map(([k, v]) => [k, fmtNum(v)])));
+    } else if (s.key === "selfcheck") {
+      const u = el("ul", "checks");
+      (d.checks || []).forEach((c) => {
+        const li = el("li", `c-${c.status}`);
+        li.append(el("span", "ic", CHECK_ICON[c.status] || "·"), el("span", null, c.name.replace(/_/g, " ")), el("span", "res", c.result));
+        u.appendChild(li);
+      });
+      box.appendChild(u);
+    } else if (s.key === "triage") {
+      box.appendChild(dl([["Severity", `SEV ${d.severity}`], ["Action", d.action]]));
+      if (d.factors) box.appendChild(blist(d.factors));
+    } else if (s.key === "dedupe") {
+      box.appendChild(dl([["Result", d.action], ["Anomaly id", d.anomaly_id], ["First seen", d.first_seen], ["Alerts so far", d.alerts]]));
+    } else if (s.key === "route") {
+      box.appendChild(dl([["Mode", d.mode], ["Parallel", d.parallel ? "yes" : "no"], ["Depth", `${d.depth} of max ${d.max_depth}`]]));
+      if (d.specialists) box.appendChild(blist(d.specialists.map((p) => `${p.skill}: ${p.question}`)));
+    } else if (s.key === "specialists") {
+      (d.outputs || []).forEach((o) => box.appendChild(specCard(o)));
+    } else if (s.key === "synthesize") {
+      box.appendChild(dl([["Why", d.why], ["Disagreement", d.disagreement ? "yes, surfaced as the decision point" : "none"]]));
+      if (d.options) ["A", "B"].forEach((k) => {
+        const o = el("div", "opt" + (d.recommended === k ? " rec" : "")); o.append(el("b", null, `Option ${k}`), document.createTextNode(`: ${d.options[k]}`)); box.appendChild(o);
+      });
+    } else if (s.key === "gate") {
+      const live = target.alert && state.decisions[target.alert.anomaly_id];
+      box.appendChild(dl([["Decision", d.decision], ["Decided by", d.decided_by], ["Executed", d.executed === false ? "no, staged only" : null],
+        ["Live decision here", live || null]]));
+    }
+    return box.childNodes.length ? box : null;
+  }
+
+  function renderTrace(target) {
+    const wrap = $("traceWrap"), host = $("trace");
+    if (!target || !target.trace) { wrap.hidden = true; return; }
+    wrap.hidden = false; host.textContent = "";
+    const total = target.trace.reduce((s, x) => s + (x.ms || 0), 0);
+    const ran = target.trace.filter((x) => x.status !== "skip").length;
+    $("traceSub").textContent = `${ran} of ${target.trace.length} steps ran · ${nf2.format(total)} ms measured · ${fmtTime(target.t)}`;
+    target.trace.forEach((s) => {
+      const li = el("li", `step st-${s.status}`);
+      const node = el("span", "node", STATUS_ICON[s.status] || "·"); node.setAttribute("aria-hidden", "true");
+      const body = el("div", "step-body");
+      const top = el("div", "step-top");
+      top.append(el("b", null, s.label), el("span", "stl", STATUS_TEXT[s.status] || s.status));
+      if (s.ms != null) top.appendChild(el("span", "ms", `${nf2.format(s.ms)} ms`));
+      body.append(top, el("div", "sum", s.summary));
+      const det = s.status !== "skip" ? stepDetail(s, target) : null;
+      if (det) {
+        const dt = el("details"); dt.open = state.traceOpen || s.key === "specialists" || s.status === "stop";
+        dt.append(el("summary", null, "Details"), det); body.appendChild(dt);
+      }
+      li.append(node, body); host.appendChild(li);
+    });
+  }
+
   function renderFocus() {
     const host = $("focus");
-    const a = state.focus && alerts.find((e) => e.anomaly_id === state.focus && e.t <= cursor());
+    const a = focusTarget();
     if (!a) {
       host.textContent = ""; host.appendChild(el("div", "empty", "No alert yet. Press Play or jump to the next event."));
-      $("fcHead").textContent = ""; $("fcSub").textContent = "click an alert in the feed"; $("focus-table").hidden = true; return;
+      $("fcHead").textContent = ""; $("fcSub").textContent = "click an alert in the feed"; $("focus-table").hidden = true;
+      renderTrace(null); return;
     }
-    const f = DATA.focus[a.anomaly_id];
-    $("fcTitle").textContent = `Anomaly in focus: ${f.name}`;
-    $("fcSub").textContent = `${a.anomaly_id} · detected ${fmtTime(a.t)}`;
-    $("fcHead").textContent = a.headline || "";
+    const f = DATA.focus[a.key];
+    $("fcTitle").textContent = `In focus: ${f.name}`;
+    $("fcSub").textContent = a.sub;
+    $("fcHead").textContent = a.headline;
+    renderTrace(a);
     host.textContent = "";
     const grid = el("div", "small-multiples");
     const tbls = el("div");
@@ -512,7 +683,8 @@ const DATA = /*__DATA__*/null;
       const day = c.ts.length > 1 && cts[1] - cts[0] >= 24 * HOUR;
       const cfg = { ts: cts, series: c.series, fmt: c.fmt, cursor: cursor(), day, height: 190, title: c.title, endLabel: true,
         bands: bands().filter((b) => b.kind === "known_event" || (b.signal === f.signal)),
-        markers: [{ t: a.t, kind: "alert", sev: a.severity, label: "alert", title: `${a.signal} ${a.entity}` }], aria: c.title };
+        markers: a.alert ? [{ t: a.t, kind: "alert", sev: a.alert.severity, label: "alert", title: `${a.signal} ${a.entity}` }]
+          : MARKERS.filter((mk) => mk.kind === "suppressed"), aria: c.title };
       requestAnimationFrame(() => lineChart(ch, cfg));
       if (state.tables.focus) { const tb = el("div"); tableFor(tb, cfg); tbls.appendChild(tb); }
     });
@@ -536,18 +708,21 @@ const DATA = /*__DATA__*/null;
     const items = [], supGroups = {};
     shown.forEach((e) => {
       if (e.kind === "suppressed") {
-        const key = new Date(e.t).toDateString() + "|" + e.reason;
-        if (!supGroups[key]) { supGroups[key] = { kind: "supgroup", t: e.t, last: e.t, reason: e.reason, title: e.title, n: 0, ents: new Set(), signal: e.signal }; items.push(supGroups[key]); }
+        const key = e.group;
+        if (!supGroups[key]) { supGroups[key] = { kind: "supgroup", group: key, t: e.t, last: e.t, reason: e.reason, title: e.title, n: 0, ents: new Set(), signal: e.signal }; items.push(supGroups[key]); }
         const g = supGroups[key]; g.n++; g.last = e.t; g.ents.add(e.entity);
       } else items.push(e);
     });
     items.sort((a, b) => (b.last || b.t) - (a.last || a.t));
     items.forEach((e) => {
       if (e.kind === "supgroup") {
-        const c = el("div", "ev muted");
+        const c = el("div", "ev muted clickable" + (state.focus === e.group ? " sel" : "")); c.tabIndex = 0;
         const r1 = el("div", "row1"); r1.append(el("span", "chip", "SUPPRESSED"), el("span", "when", `${fmtTime(e.t)} – ${fmtTime(e.last).slice(-5)}`));
         c.append(r1, el("div", "hl", `Self-check held back ${e.n} raw ${e.signal} detection${e.n > 1 ? "s" : ""} across ${e.ents.size} account${e.ents.size > 1 ? "s" : ""}`),
-          el("div", "why", `${e.reason}. Example: ${e.title}. Nobody was paged.`));
+          el("div", "why", `${e.reason}. Example: ${e.title}. Nobody was paged. Click for the agent trace.`));
+        const pickSup = () => { state.focus = e.group; state.expanded = null; renderFeed(); renderFocus(); };
+        c.addEventListener("click", pickSup);
+        c.addEventListener("keydown", (k) => { if (k.key === "Enter") pickSup(); });
         host.appendChild(c); return;
       }
       if (e.kind === "resolved") {
@@ -677,7 +852,11 @@ const DATA = /*__DATA__*/null;
     const now = cursor();
     const nxt = events.find((e) => e.t > now && e.kind !== "resolved");
     pause();
-    if (nxt) { state.i = hours.indexOf(nxt.t); const a = firstAlerts.find((x) => x.t === nxt.t); if (a) state.focus = a.anomaly_id; }
+    if (nxt) {
+      state.i = hours.indexOf(nxt.t);
+      const a = firstAlerts.find((x) => x.t === nxt.t);
+      if (a) state.focus = a.anomaly_id; else if (nxt.kind === "suppressed") state.focus = nxt.group;
+    }
     renderAll();
   }
 
@@ -688,6 +867,11 @@ const DATA = /*__DATA__*/null;
   $("speed").addEventListener("change", () => { if (state.playing) { pause(); play(); } });
   scrub.addEventListener("input", () => { pause(); stepTo(Number(scrub.value)); });
   $("truthToggle").addEventListener("change", renderAll);
+  $("traceAll").addEventListener("click", () => {
+    state.traceOpen = !state.traceOpen;
+    $("traceAll").textContent = state.traceOpen ? "Collapse" : "Expand all";
+    renderFocus();
+  });
   document.querySelectorAll("[data-table]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.table; state.tables[k] = !state.tables[k];
     $(k + "-table").hidden = !state.tables[k]; b.textContent = state.tables[k] ? "Chart only" : "Table";

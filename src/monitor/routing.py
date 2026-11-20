@@ -11,6 +11,7 @@ never route back to the monitor. Panels (score >= 4) run their specialists in pa
 from __future__ import annotations
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
@@ -90,6 +91,14 @@ class Router:
 
     def _one(self, skill: str, question: str, det: Detection, data: MarketData, aid: str,
              payload: dict | None) -> dict:
+        t0 = time.perf_counter()
+        out = self._run_one(skill, question, det, data, aid, payload)
+        out["question"] = question
+        out["ms"] = round((time.perf_counter() - t0) * 1000, 2)
+        return out
+
+    def _run_one(self, skill: str, question: str, det: Detection, data: MarketData, aid: str,
+                 payload: dict | None) -> dict:
         if self.mode == "llm":
             try:
                 out = specialists_llm.run(skill, question, payload, self.cfg, self.client)
@@ -99,6 +108,7 @@ class Router:
                 self.llm_errors.append(f"{skill}: {exc!r}")
                 out = specialists_rules.run(skill, det, data, aid)
                 out["source"] = "rules, llm failed"
+                out["llm_error"] = repr(exc)[:300]
                 return out
         return specialists_rules.run(skill, det, data, aid)
 

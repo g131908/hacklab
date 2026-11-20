@@ -136,22 +136,31 @@ def build(open_browser: bool = False) -> Path:
             bands.append(dict(kind="injected", label=f"{sc['id']} ({sc['entity']})", start=_iso(sc["start"]),
                               end=_iso(sc["end"]), expected=sc["expected"], signal=sc["signal"]))
 
-    events, focus = [], {}
+    events, focus, sup_groups = [], {}, set()
     for _, r in log.sort_values("ts").iterrows():
         e = dict(ts=_iso(r.ts), kind=r.event, signal=r.get("signal"), entity=r.get("entity"),
                  anomaly_id=r.get("anomaly_id") if isinstance(r.get("anomaly_id"), str) else None)
+        trace = r.get("trace") if isinstance(r.get("trace"), list) else None
         if r.event in ("alert", "digest"):
             e.update(severity=int(r.severity), headline=r.get("headline"), text=r.get("text"),
                      options=r.get("options"), recommended=r.get("recommended"), decision=r.get("decision"),
                      realert=bool(r.get("realert")), disagreement=bool(r.get("disagreement")),
                      specialists=r.get("specialists") or [],
-                     money=None if pd.isna(r.get("money_at_risk_day")) else float(r.get("money_at_risk_day")))
+                     money=None if pd.isna(r.get("money_at_risk_day")) else float(r.get("money_at_risk_day")),
+                     trace=trace)
             if e["anomaly_id"] not in focus:
                 focus[e["anomaly_id"]] = dict(signal=r.signal, entity=r.entity,
                                               name=SIGNAL_NAMES.get(r.signal, r.signal),
                                               charts=focus_charts(r.signal, r.entity, r.ts, data))
         elif r.event == "suppressed":
-            e.update(reason=r.get("reason"), title=r.get("title"))
+            group = f"{r.ts:%Y-%m-%d}|{r.get('reason')}"
+            e.update(reason=r.get("reason"), title=r.get("title"), group="SUP|" + group)
+            if group not in sup_groups:  # one example trace + charts per suppressed group keeps the file small
+                sup_groups.add(group)
+                e["trace"] = trace
+                focus["SUP|" + group] = dict(signal=r.signal, entity=r.entity,
+                                             name=f"{SIGNAL_NAMES.get(r.signal, r.signal)} (suppressed)",
+                                             charts=focus_charts(r.signal, r.entity, r.ts, data))
         events.append(e)
 
     evaluation = compute(truth, log) if truth else None

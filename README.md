@@ -63,6 +63,11 @@ also nach jedem `replay.py` neu bauen.
 - Deep Links: `index.html#t=end`, `index.html#t=2026-11-18T07:00` (Feiertag, Unterdrückung).
 - Tasten: `Space` Play/Pause, `←`/`→` ±1 h, `N` nächstes Event, `Esc` Dialog schließen.
 - Jede Grafik hat eine Tabellenansicht, Hell-/Dunkelmodus folgt dem System.
+- **Agent-Trace** pro Alarm (und pro Gruppe unterdrückter Detektionen) als Zeitleiste unter den Fokus-Charts:
+  Detektor → Self-Checks mit Einzelergebnis → Triage-Score mit Faktoren → Dedupe → Routing mit Leitfragen
+  → Specialist-Antworten (Fakten, Hypothesen, Empfehlung, fehlende Daten) → Synthese → Gate → Log, jeweils mit
+  Status und gemessener Dauer. Bei unterdrückten Detektionen sieht man, an welchem Check die Pipeline stoppt.
+  Der Trace steht auch im Log (`trace`-Feld in `alerts.jsonl`).
 
 Demo-Ablauf (ca. 3 Min.): Reset → Play → Tracking-Break (SEV 5, Entscheidung A) → Klickbetrug
 → Runaway Spend → Feiertag: „115 suppressed“, niemand wird gepaged → Creative Fatigue mit
@@ -87,6 +92,7 @@ src/
     specialists_llm.py    Claude-API-Specialist mit SKILL.md + Structured Output
     alert.py              Synthese: ein Alarm, eine Entscheidung (SKILL.md Abschnitt 5)
     pipeline.py           ein Monitoring-Lauf (geteilt von Replay und späterem Live-Loop)
+    trace.py              Agent-Trace: ein Eintrag pro Pipeline-Schritt mit Status, Dauer, Details
     state.py              open-anomalies.json, Cooldown, KILL-Check
 .agents/monitoring/
   config.yaml             Schwellen, Caps, Known Events

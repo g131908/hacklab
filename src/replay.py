@@ -34,11 +34,13 @@ def make_decider(auto: str | None):
                 ans = input(f">>> Your decision [A/B] (Enter = recommended {al['recommended']}): ")
             except EOFError:  # no interactive terminal
                 print(f"(no terminal input) -> recommended {al['recommended']}")
+                decide.mode = "no terminal input -> recommended"
                 return al["recommended"]
             ans = ans.replace("﻿", "").strip().upper() or al["recommended"]
             if ans in ("A", "B"):
                 return ans
             print("    please type A or B")
+    decide.mode = f"auto ({auto})" if auto else "terminal (human)"
     return decide
 
 
