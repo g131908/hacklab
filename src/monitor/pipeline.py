@@ -11,6 +11,7 @@ import pandas as pd
 from . import alert as alert_mod
 from . import trace as tr_mod
 from .detectors import run_detectors
+from .learning import DecisionMemory
 from .loader import MarketData
 from .routing import Router, specialists_for
 from .selfcheck import check, dedupe, freshness
@@ -65,6 +66,7 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
     dets = [d for d in dets if d not in merged]
 
     router = router or Router(cfg)
+    mem = DecisionMemory(state.folder, cfg)
     fired = alerted = suppressed = 0
     for det in dets:
         t0 = time.perf_counter()
@@ -121,6 +123,17 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                              label=data.label, realert=(action == "realert"))
         tr_mod.synth_step(tr, al, alert_mod._why(specialists), _ms(t0))
 
+        # decision memory: past HUMAN decisions on this signal (+ account) may change the recommendation
+        t0 = time.perf_counter()
+        memory = None
+        if action_for(sev) != "log":
+            # asked before this alert's own decision exists, so it only sees earlier decisions
+            memory = mem.advise(det.signal, det.entity, al["recommended"])
+            if memory["basis"]:
+                al = alert_mod.build(det, sev, factors, res.checks, specialists, label=data.label,
+                                     realert=(action == "realert"), memory=memory)
+        tr_mod.memory_step(tr, memory, al.get("analysis_recommended", al["recommended"]), _ms(t0))
+
         decision = None
         kind = "digest" if action_for(sev) == "log" else "alert"
         notify(dict(type=kind, severity=sev, **al))
@@ -133,6 +146,10 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                     rec["decision"] = decision
                     state.log_decision(rec["anomaly_id"], decision, al["options"][decision],
                                        getattr(decide, "mode", "human"), data.label)
+                    mem.record(anomaly_id=rec["anomaly_id"], signal=det.signal, entity=det.entity,
+                               severity=sev, recommended=al["recommended"], decision=decision,
+                               decided_by=getattr(decide, "mode", "human"), data_ts=str(now),
+                               learned=al.get("learned", False), data_label=data.label)
                 else:
                     decision = None
                     rec["decision"] = "pending"
@@ -153,7 +170,7 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                                           for s in specialists],
                              disagreement=al["disagreement"], headline=al["headline"],
                              text=al["text"], options=al["options"], recommended=al["recommended"],
-                             trace=tr.to_list()))
+                             learned=al.get("learned", False), trace=tr.to_list()))
 
     state.save()
     state.log_run(now, len(dets), fired, alerted, suppressed)

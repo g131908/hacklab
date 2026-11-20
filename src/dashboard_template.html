@@ -625,6 +625,12 @@ const DATA = /*__DATA__*/null;
       if (d.options) ["A", "B"].forEach((k) => {
         const o = el("div", "opt" + (d.recommended === k ? " rec" : "")); o.append(el("b", null, `Option ${k}`), document.createTextNode(`: ${d.options[k]}`)); box.appendChild(o);
       });
+    } else if (s.key === "memory") {
+      box.appendChild(dl([["Scope", d.scope === "account" ? "same signal and account" : d.scope === "signal" ? "same signal, all accounts" : "none yet"],
+        ["Analysis recommended", d.analysis_recommended], ["Final recommendation", d.final_recommended],
+        ["Changed by memory", d.applied ? "yes" : "no"]]));
+      if (d.basis && d.basis.length) box.appendChild(blist(d.basis.map((b) =>
+        `${b.decided_at}: ${b.anomaly_id} - chose ${b.decision} (recommended ${b.recommended}) by ${b.decided_by}`)));
     } else if (s.key === "gate") {
       const live = target.alert && state.decisions[target.alert.anomaly_id];
       box.appendChild(dl([["Decision", d.decision], ["Decided by", d.decided_by], ["Executed", d.executed === false ? "no, staged only" : null],
@@ -737,6 +743,7 @@ const DATA = /*__DATA__*/null;
       const chips = el("div", "chips");
       (e.specialists || []).forEach((s) => chips.appendChild(el("span", "chip", `${s.skill} · ${s.stance ? s.stance.replace("_", " ") : "?"}`)));
       if (e.disagreement) chips.appendChild(el("span", "chip dis", "⚑ specialists disagree"));
+      if (e.learned) chips.appendChild(el("span", "chip dis", "↻ learned from your past decisions"));
       const live = state.decisions[e.anomaly_id];
       if (e.severity >= 4) chips.appendChild(el("span", "chip", live ? `decision ${live} (live)` : e.decision ? `decision ${e.decision} (replay)` : "decision pending"));
       c.appendChild(chips);

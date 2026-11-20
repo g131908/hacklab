@@ -15,10 +15,10 @@ from .triage import SIGNALS, action_for
 
 ACTION_TEXT = {"log": "log only (daily digest)", "single": "single specialist",
                "panel": "specialist panel, notify now", "page": "page a human now"}
-PIPELINE = ["detect", "selfcheck", "triage", "dedupe", "route", "specialists", "synthesize", "gate", "log"]
+PIPELINE = ["detect", "selfcheck", "triage", "dedupe", "route", "specialists", "synthesize", "memory", "gate", "log"]
 LABELS = {"detect": "Detector", "selfcheck": "Self-checks", "dedupe": "Dedupe & cooldown",
           "triage": "Triage score", "route": "Routing", "specialists": "Specialist answers",
-          "synthesize": "Synthesis", "gate": "Human gate", "log": "Log & state"}
+          "synthesize": "Synthesis", "memory": "Decision memory", "gate": "Human gate", "log": "Log & state"}
 
 
 class Trace:
@@ -129,6 +129,21 @@ def synth_step(tr: Trace, al: dict, why: str, ms: float):
            + f"recommended option {al['recommended']}",
            dict(headline=al["headline"], why=why, disagreement=al["disagreement"],
                 options=al["options"], recommended=al["recommended"]), ms)
+
+
+def memory_step(tr: Trace, memory: dict | None, analysis_rec: str, ms: float):
+    if memory is None:
+        tr.add("memory", "skip", "no decision needed at this severity")
+        return
+    basis = [dict(anomaly_id=b["anomaly_id"], decision=b["decision"], recommended=b["recommended"],
+                  decided_by=b["decided_by"], decided_at=b["decided_at"], entity=b["entity"])
+             for b in memory.get("basis", [])]
+    status = "info" if memory.get("applied") else "pass"
+    summary = memory["text"] if not memory.get("applied") else \
+        f"learned: {memory['text']}"
+    tr.add("memory", status, summary,
+           dict(applied=bool(memory.get("applied")), scope=memory.get("scope"), analysis_recommended=analysis_rec,
+                final_recommended=memory["recommended"], basis=basis), ms)
 
 
 def gate_step(tr: Trace, sev: int, kind: str, decision: str | None, decided_by: str, ms: float):

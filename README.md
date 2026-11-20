@@ -51,6 +51,23 @@ python src\evaluate.py             # injected / detected / false alarms / time-t
 python src\dashboard.py --open     # Demo-Dashboard -> dashboard\index.html (offline, Doppelklick reicht)
 ```
 
+## Lernen aus Entscheidungen
+
+Jede Gate-Entscheidung landet in `.agents\monitoring\decision-history.jsonl`. Die Datei bleibt auch nach einem Replay-Reset erhalten.
+Gelernt wird **nur aus menschlichen Entscheidungen** (Terminal, `decide.py`), nie aus `--auto` oder einem geplanten Tick.
+
+- Hat ein Mensch beim selben Signal und Account anders entschieden als empfohlen, empfiehlt der Agent beim
+  nächsten Mal dessen Wahl. Im Alarm steht dann „Learned from: …“, dazu was die Analyse allein empfehlen würde.
+  Accountübergreifend greift das erst ab 3 Entscheidungen. Bei geteilten Stimmen bleibt die Analyse-Empfehlung.
+- Zweimal „hold“ (B) beim selben Signal und Account erzeugt einen Schwellen-Vorschlag in
+  `.agents\monitoring\learning-proposals.md`. Der wird **nie automatisch** übernommen.
+- Sichtbar ist das im Agent-Trace (Schritt „Decision memory“) und als Chip im Dashboard-Feed.
+- `python src\decide.py --history` zeigt das Gedächtnis, `--forget` löscht es.
+
+Demo: `python src\replay.py` laufen lassen und bei Creative Fatigue **B** eintippen, sonst Enter. Danach
+`python src\replay.py --auto rec`: Jetzt empfiehlt der Agent bei Creative Fatigue B und sagt warum.
+Das löst auch den Widerspruch zwischen den Specialists auf. Nach der Demo: `python src\decide.py --forget`.
+
 ## Demo-Dashboard
 
 `dashboard\index.html` ist eine einzelne Datei ohne Internet-Abhängigkeit. Sie wird aus dem letzten Replay erzeugt,

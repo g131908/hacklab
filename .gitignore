@@ -12,3 +12,5 @@ data/injected.json
 .agents/monitoring/decisions.md
 dashboard/
 .agents/monitoring/live-cursor.json
+.agents/monitoring/decision-history.jsonl
+.agents/monitoring/learning-proposals.md

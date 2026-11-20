@@ -67,7 +67,8 @@ def _disagreement(specialists: list[dict]) -> tuple[str, str | None]:
 
 
 def build(det: Detection, severity: int, factors: list[str], checks: dict,
-          specialists: list[dict], label: str = "", realert: bool = False) -> dict:
+          specialists: list[dict], label: str = "", realert: bool = False,
+          memory: dict | None = None) -> dict:
     pb = PLAYBOOK[det.signal][det.direction]
     e = det.entity
     kind = "Advertiser" if det.entity_type == "advertiser" else "Supply source"
@@ -80,6 +81,9 @@ def build(det: Detection, severity: int, factors: list[str], checks: dict,
         rec, rec_note = pb["rec"], " (specialists disagree - default from playbook, your call)"
     else:
         rec, rec_note = spec_rec or pb["rec"], ""
+    analysis_rec = rec
+    if memory and memory.get("applied"):  # human decision history wins over the default (and breaks ties)
+        rec, rec_note = memory["recommended"], " (learned from your past decisions)"
 
     spec_evidence = [ev for s in _ran(specialists) for ev in s.get("evidence", [])][:3]
     missing = []
@@ -112,6 +116,9 @@ def build(det: Detection, severity: int, factors: list[str], checks: dict,
         f"  B) {pb['B'].format(e=e)}",
         f"Recommended: {rec}{rec_note}. Owner: {pb['owner']}. Re-check: in {pb['recheck']}.",
     ]
+    if memory and memory.get("basis"):
+        lines.append(f"Learned from: {memory['text']}"
+                     + (f" (analysis alone would recommend {analysis_rec})" if memory.get("applied") else "") + ".")
     if actions:
         lines.append("Staged by specialists: " + " | ".join(actions[:3]))
     if verify:
@@ -122,4 +129,5 @@ def build(det: Detection, severity: int, factors: list[str], checks: dict,
         "Triage: " + ", ".join(factors) + f". Routed: {routed}.",
     ]
     return dict(text="\n".join(lines), options={"A": pb["A"].format(e=e), "B": pb["B"].format(e=e)},
-                recommended=rec, headline=headline, disagreement=disagree != "(none)")
+                recommended=rec, headline=headline, disagreement=disagree != "(none)",
+                analysis_recommended=analysis_rec, learned=bool(memory and memory.get("applied")))

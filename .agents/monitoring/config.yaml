@@ -56,6 +56,11 @@ live:                            # src/live.py, called hourly by /loop or cron
   mode: "demo"                   # demo = next hour of demo data per tick | live = newest real data hour
   demo_start: "2026-11-13 00:00" # first hour with a same-weekday baseline, shortly before the first scenario
   demo_hours_per_tick: 12
+learning:                        # decision memory (src/monitor/learning.py); learns only from HUMAN decisions
+  enabled: true
+  min_entity_decisions: 1        # 1 human override on the same signal + account changes the next recommendation
+  min_signal_decisions: 3        # across accounts only after 3 human decisions on that signal
+  propose_after: 2               # 2x "hold" (B) on the same signal + account -> written threshold proposal (never applied)
 cooldown_hours: 6
 auto_resolve_checks: 2
 notify:

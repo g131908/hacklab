@@ -181,6 +181,7 @@ def build(open_browser: bool = False) -> Path:
             e.update(severity=int(r.severity), headline=r.get("headline"), text=r.get("text"),
                      options=r.get("options"), recommended=r.get("recommended"), decision=r.get("decision"),
                      realert=bool(r.get("realert")), disagreement=bool(r.get("disagreement")),
+                     learned=bool(r.get("learned")) if not pd.isna(r.get("learned", False)) else False,
                      specialists=r.get("specialists") or [],
                      money=None if pd.isna(r.get("money_at_risk_day")) else float(r.get("money_at_risk_day")),
                      trace=trace)
