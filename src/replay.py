@@ -16,6 +16,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from monitor.loader import make_source  # noqa: E402
 from monitor.pipeline import run_once  # noqa: E402
+from monitor.routing import Router  # noqa: E402
 from monitor.state import State  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,6 +46,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--auto", choices=["A", "B", "rec"], help="answer decisions automatically")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--routing", choices=["auto", "rules", "llm"],
+                    help="specialist execution (default: routing.mode from config)")
     args = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -61,12 +64,21 @@ def main() -> None:
     hours = pd.date_range(min(data.advertisers.ts.min(), data.supply.ts.min()),
                           data.latest_ts, freq="h")
     print(f"=== REPLAY [{label}] {hours[0]} .. {hours[-1]} ({len(hours)} hours) ===")
+    router = Router(cfg, args.routing)
     print(f"    {data.advertisers.advertiser_id.nunique()} advertisers, "
-          f"{data.supply.source_id.nunique()} supply sources; config: {CFG.relative_to(ROOT)}\n")
+          f"{data.supply.source_id.nunique()} supply sources; config: {CFG.relative_to(ROOT)}")
+    print(f"    specialist routing: {router.mode}"
+          + (" (Claude API, falls back to rules on error)" if router.mode == "llm" else
+             " (rule-based; set ANTHROPIC_API_KEY or use --routing llm for Claude)") + "\n")
+    for err in router.llm_errors:
+        print(f"    note: {err}")
 
     decide = make_decider(args.auto)
 
     def notify(al: dict) -> None:
+        if al["type"] == "page":
+            print(f"\n!!! {al['text']}")
+            return
         print(f"\n{'=' * 100}\n{al['text']}")
         if al["type"] == "alert" and al["severity"] >= 4:
             print("-" * 100)
@@ -76,7 +88,7 @@ def main() -> None:
     for now in hours:
         if now.hour == 0 and not args.quiet:
             print(f"--- {now:%a %d.%m.%Y} ---")
-        events = run_once(data.until(now), now, cfg, state, notify, decide)
+        events = run_once(data.until(now), now, cfg, state, notify, decide, router)
         for ev in events:
             t = ev["type"]
             totals[t] = totals.get(t, 0) + 1
@@ -106,6 +118,10 @@ def main() -> None:
 
     print(f"\n=== REPLAY DONE [{label}] alerts={totals['alert']} digest={totals['digest']} "
           f"suppressed_by_selfcheck={totals['suppressed']} raw detections resolved={totals['resolved']}")
+    if router.llm_errors:
+        print(f"    LLM specialist errors (fell back to rules): {len(router.llm_errors)}")
+        for err in router.llm_errors[:5]:
+            print(f"      - {err}")
     print("    log: .agents/monitoring/alerts.jsonl | decisions: .agents/monitoring/decisions.md")
     print("    next: python src/evaluate.py")
 

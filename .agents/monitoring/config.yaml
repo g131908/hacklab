@@ -34,6 +34,12 @@ caps:
 autonomy:                        # Tier-2 actions allowed without approval (default: none)
   allowed_actions: []
   allowlist: []
+routing:
+  mode: "auto"                   # auto | rules | llm  (auto = llm if ANTHROPIC_API_KEY is set, else rules)
+  model: "claude-opus-5-5"
+  effort: "medium"
+  max_depth: 2                   # loop prevention: monitor -> specialist -> one consult
+  timeout_seconds: 90
 cooldown_hours: 6
 auto_resolve_checks: 2
 notify:

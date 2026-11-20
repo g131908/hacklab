@@ -9,9 +9,10 @@ import pandas as pd
 from . import alert as alert_mod
 from .detectors import run_detectors
 from .loader import MarketData
+from .routing import Router
 from .selfcheck import check, dedupe, freshness
 from .state import State
-from .triage import action_for, route, score
+from .triage import SIGNALS, action_for, score
 
 # notify(alert_dict) shows the alert; decide(alert_dict) -> "A" | "B", only for SEV >= 4 (the GATE)
 Notifier = Callable[[dict], None]
@@ -19,7 +20,7 @@ Decider = Callable[[dict], str]
 
 
 def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
-             notify: Notifier, decide: Decider) -> list[dict]:
+             notify: Notifier, decide: Decider, router: Router | None = None) -> list[dict]:
     """Returns events for display: alert | suppressed | resolved | pipeline | error | killed."""
     if state.killed():
         state.log_run(now, 0, 0, 0, 0, note="killed (KILL file present)")
@@ -41,6 +42,7 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         state.log_run(now, 0, 0, 1, 0, errors=1, note=repr(exc))
         return [ev]
 
+    router = router or Router(cfg)
     fired = alerted = suppressed = 0
     for det in dets:
         res = check(det, fresh, cfg)
@@ -67,7 +69,12 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         if action in ("cooldown", "update"):
             suppressed += 1
             continue
-        specialists = route(det, sev)
+        if action_for(sev) == "page":  # SEV 5: page with the facts before the diagnosis is finished
+            notify(dict(type="page", severity=sev, anomaly_id=rec["anomaly_id"],
+                        text=(f"[{data.label}] " if data.label else "") +
+                        f"PAGE [SEV 5] {SIGNALS[det.signal]['name']}: {det.entity} - {det.title}. "
+                        f"Facts: {'; '.join(det.evidence)}. Diagnosis running..."))
+        specialists = router.route(det, sev, rec["anomaly_id"], data) if action_for(sev) != "log" else []
         al = alert_mod.build(det, sev, factors, res.checks, specialists,
                              label=data.label, realert=(action == "realert"))
         decision = None
@@ -83,7 +90,11 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
                            text=al["text"], decision=decision, recommended=al["recommended"]))
         state.log_event(dict(event=kind, ts=now, anomaly_id=rec["anomaly_id"], signal=det.signal,
                              entity=det.entity, severity=sev, realert=(action == "realert"),
-                             money_at_risk_day=det.money_at_risk_day, decision=decision))
+                             money_at_risk_day=det.money_at_risk_day, decision=decision,
+                             specialists=[dict(skill=s["skill"], source=s.get("source"),
+                                               stance=s.get("stance"), diagnosis=s.get("diagnosis"))
+                                          for s in specialists],
+                             disagreement=al["disagreement"]))
 
     state.save()
     state.log_run(now, len(dets), fired, alerted, suppressed)

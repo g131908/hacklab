@@ -1,4 +1,4 @@
-"""TRIAGE: score 1-5 (SKILL.md section 3) + ROUTE placeholder (section 4)."""
+"""TRIAGE: score 1-5 (SKILL.md section 3). Routing to specialists lives in routing.py."""
 from __future__ import annotations
 
 from .detectors import Detection
@@ -7,14 +7,11 @@ from .detectors import Detection
 # cross_side: affects advertisers and supply. multi_domain: needs 2+ specialist skills.
 # irreversible: the recommended fix touches billing/users or cannot simply be undone.
 SIGNALS = {
-    "S1": dict(name="Spend pacing", floor=3, cross_side=False, multi_domain=False,
-               irreversible=False, route=["ads", "attribution"]),
-    "S4": dict(name="Tracking break", floor=4, cross_side=True, multi_domain=True,
-               irreversible=False, route=["conversion-tracking", "analytics"]),
-    "S6": dict(name="Creative fatigue", floor=2, cross_side=False, multi_domain=True,
-               irreversible=False, route=["marketing-psychology", "ads"]),
+    "S1": dict(name="Spend pacing", floor=3, cross_side=False, multi_domain=False, irreversible=False),
+    "S4": dict(name="Tracking break", floor=4, cross_side=True, multi_domain=True, irreversible=False),
+    "S6": dict(name="Creative fatigue", floor=2, cross_side=False, multi_domain=True, irreversible=False),
     "S7": dict(name="Invalid traffic", floor=4, cross_side=True, multi_domain=False,
-               irreversible=True, route=["analytics"]),   # payouts/billing involved
+               irreversible=True),   # payouts/billing involved
 }
 
 
@@ -49,17 +46,3 @@ def action_for(severity: int) -> str:
     if severity == 4:
         return "panel"     # 2-3 specialists, notify now
     return "page"          # page a human now, before diagnosis is finished
-
-
-def route(det: Detection, severity: int) -> list[dict]:
-    """PLACEHOLDER: specialist routing is not built yet.
-
-    Will load the specialist skills (SKILL.md section 4) and return outputs in the
-    specialist output contract. Today it only returns which skills *would* be asked,
-    with status "not_implemented", so synthesis can show that no specialist ran.
-    """
-    skills = SIGNALS[det.signal]["route"]
-    if action_for(severity) in ("log", "single"):
-        skills = skills[:1]
-    return [dict(skill=s, status="not_implemented", diagnosis=None, hypotheses=[],
-                 missing_data=["specialist routing not implemented"]) for s in skills]

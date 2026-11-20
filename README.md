@@ -16,6 +16,31 @@ pip install -r requirements.txt
 Falls PowerShell das Aktivieren blockiert:
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
+Optional, für Specialist-Diagnosen per Claude API:
+
+```powershell
+pip install -r requirements-llm.txt
+$env:ANTHROPIC_API_KEY = "sk-ant-..."     # CMD: set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Specialist-Routing (hybrid)
+
+Jeder Alarm ab SEV 3 wird an die passenden Skills geroutet (SEV 3: ein Specialist, SEV 4-5: Panel parallel):
+
+| Signal | Specialists |
+|---|---|
+| S1 Spend pacing | ads, attribution |
+| S4 Tracking break | conversion-tracking, analytics |
+| S6 Creative fatigue | marketing-psychology, ads |
+| S7 Invalid traffic | analytics |
+
+- `routing.mode` in der Config bzw. `--routing`: `rules` (offline, deterministisch), `llm` (Claude mit der jeweiligen
+  `SKILL.md` als System-Prompt, Structured Output im Specialist-Contract), `auto` (llm wenn `ANTHROPIC_API_KEY` gesetzt, sonst rules).
+- Schlägt ein LLM-Call fehl (kein Key, Netz, Refusal), fällt genau dieser Specialist auf die Regeln zurück.
+- LLM-Modus kostet pro Specialist-Call; der Demo-Replay macht 7 Calls (4 Alarme).
+- Widersprechen sich Specialists (z. B. `act_now` vs. `hold`), steht das als Entscheidungspunkt im Alarm.
+- Test ohne API-Calls: `python tests\test_routing.py`
+
 ## Ausführen
 
 ```powershell
@@ -36,8 +61,12 @@ src/
     loader.py             Datenquelle (CSV, später austauschbar gegen API)
     detectors.py          S1 Pacing, S4 Tracking-Break, S6 Creative Fatigue, S7 Fraud
     selfcheck.py          Freshness, Min-Sample, Saisonalität, Known Events, Dedupe
-    triage.py             Score 1-5 (+ Platzhalter fürs Routing an Specialist-Skills)
-    alert.py              Alarm-Format (SKILL.md Abschnitt 5)
+    triage.py             Score 1-5
+    routing.py            Routing an Specialist-Skills (hybrid, Depth-Guard, Panel parallel)
+    specialists_rules.py  regelbasierte Methode je Skill x Signal
+    specialists_llm.py    Claude-API-Specialist mit SKILL.md + Structured Output
+    alert.py              Synthese: ein Alarm, eine Entscheidung (SKILL.md Abschnitt 5)
+    pipeline.py           ein Monitoring-Lauf (geteilt von Replay und späterem Live-Loop)
     state.py              open-anomalies.json, Cooldown, KILL-Check
 .agents/monitoring/
   config.yaml             Schwellen, Caps, Known Events
