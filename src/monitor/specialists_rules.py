@@ -272,7 +272,72 @@ def analytics_s7(det: Detection, data: MarketData, aid: str) -> dict:
     )
 
 
+# ====================================================================== S2 budget cap breach risk
+def ads_s2(det: Detection, data: MarketData, aid: str) -> dict:
+    out = ads_s1(det, data, aid)  # same pacing analysis (CPM vs volume, ROAS), framed against the cap
+    m = det.metrics
+    out["evidence"].insert(0, f"projected EUR {m['projected']:,.0f} vs hard cap EUR {m['cap']:,.0f} "
+                              f"(EUR {m['spend_to_date']:,.0f} spent, {m['day_share']:.0%} of a normal day done)")
+    needed = 1 - m["cap"] / m["projected"] if m["projected"] else 0
+    out["recommended_action"] = _act(
+        f"Lower {det.entity}'s bids/daily budget by {min(needed, 0.20):.0%} now (cap per run 20%)"
+        + (f"; {needed:.0%} needed in total, re-check in 1h and repeat" if needed > 0.20 else ""),
+        2, True, f"keeps end-of-day spend under the EUR {m['cap']:,.0f} cap")
+    out["stance"] = "act_now"  # a hard cap is a hard cap, whatever ROAS says
+    return out
+
+
+# ====================================================================== S8 fill rate / inventory drop
+def analytics_s8(det: Detection, data: MarketData, aid: str) -> dict:
+    src, now, m = det.entity, det.ts, det.metrics
+    start = det.window_start
+    req, imp = data.wide("sup", "ad_requests"), data.wide("sup", "impressions")
+    others = []
+    for s in req.columns:
+        if s == src:
+            continue
+        r, r_lw = req[s].loc[start:now].sum(), req[s].loc[start - WEEK:now - WEEK].sum()
+        f = imp[s].loc[start:now].sum() / r if r else 0
+        f_lw = imp[s].loc[start - WEEK:now - WEEK].sum() / r_lw if r_lw else 0
+        others.append((s, _ratio(f, f_lw) - 1, _ratio(r, r_lw) - 1))
+    isolated = all(abs(fr) < 0.10 and rr > -0.15 for _, fr, rr in others)
+    fill_drop = m["fill_ratio"] <= 0.80
+    if fill_drop:
+        diag = (f"{src} receives its usual ad requests ({m['requests_ratio'] - 1:+.0%}) but fills only "
+                f"{m['fill_rate']:.0%} instead of {m['fill_rate_baseline']:.0%}: ")
+        diag += ("demand is not reaching this source (bid-request/SSP integration or a blocklist), "
+                 "since the other sources fill normally." if isolated else
+                 "the drop is marketplace-wide, so it is demand-side (fewer bids/budgets), not this source.")
+        hyps = ([("Broken SSP/bid-request integration or timeout on this source", "high",
+                  "Check bid-request error rates and timeouts for this source since the drop started"),
+                 ("A new blocklist/brand-safety rule excludes this source's inventory", "medium",
+                  "Check recent targeting/blocklist changes affecting this source")] if isolated else
+                [("Advertiser demand fell (budgets exhausted, campaigns paused)", "medium",
+                  "Compare active campaigns and bids vs last week")])
+    else:
+        diag = (f"{src} receives {m['requests_ratio'] - 1:+.0%} ad requests vs last week: "
+                + ("the publisher's traffic or integration dropped." if isolated else
+                   "all sources dropped, which points to a seasonal/event effect."))
+        hyps = [("Publisher traffic loss or SDK/tag outage", "medium" if isolated else "low",
+                 "Ask the publisher for their traffic; check SDK version/error rates")]
+    return _out(
+        "analytics", aid, diag,
+        [f"other sources, same window (fill change / request change): "
+         + ", ".join(f"{s} {fr:+.0%} / {rr:+.0%}" for s, fr, rr in others),
+         f"~{m['lost_impressions']:,.0f} impressions not delivered in {int((now - start) / HOUR) + 1}h "
+         f"at EUR {m['cpm']:.2f} avg advertiser CPM"],
+        hyps,
+        _act(f"Open a supply incident for {src} and move affected campaigns' demand to the other sources", 2, True,
+             "restores delivery for advertisers while the source is fixed"),
+        "act_now" if isolated else "investigate",
+        ["bid-request / SSP error logs", "publisher-side traffic numbers", "change log for targeting and blocklists"],
+    )
+
+
 RULES = {
+    ("ads", "S2"): ads_s2,
+    ("attribution", "S2"): attribution_s1,
+    ("analytics", "S8"): analytics_s8,
     ("conversion-tracking", "S4"): conversion_tracking_s4,
     ("analytics", "S4"): analytics_s4,
     ("ads", "S1"): ads_s1,

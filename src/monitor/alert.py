@@ -15,6 +15,14 @@ PLAYBOOK = {
                   B="Hold and re-check in 2h (risk: under-delivery vs plan)",
                   rec="B", owner="campaign manager", recheck="2h"),
     ),
+    "S2": dict(up=dict(
+        A="Lower {e}'s bids/daily budget now so the projection stays under the hard cap (-20% per run, reversible)",
+        B="Keep running and re-check in 1h (risk: the hard cap is breached, overspend billed)",
+        rec="A", owner="campaign manager + finance", recheck="1h")),
+    "S8": dict(down=dict(
+        A="Open an incident with {e} / its SSP integration and shift demand to the other sources (reversible)",
+        B="Hold and re-check in 2h (risk: advertisers keep losing delivery on {e})",
+        rec="A", owner="supply ops", recheck="2h")),
     "S4": dict(down=dict(
         A="Pause automated bidding on {e} until tracking is fixed (reversible, stops wasted spend)",
         B="Keep running, fix the tag first (risk: bidding learns from bad data)",

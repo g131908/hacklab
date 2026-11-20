@@ -8,6 +8,10 @@ from .detectors import Detection
 # irreversible: the recommended fix touches billing/users or cannot simply be undone.
 SIGNALS = {
     "S1": dict(name="Spend pacing", floor=3, cross_side=False, multi_domain=False, irreversible=False),
+    "S2": dict(name="Budget cap breach risk", floor=5, cross_side=False, multi_domain=False,
+               irreversible=False),   # floor 5: always escalate (SKILL.md section 7)
+    "S8": dict(name="Fill rate / inventory drop", floor=3, cross_side=True, multi_domain=False,
+               irreversible=False),   # supply drop = advertisers lose delivery
     "S4": dict(name="Tracking break", floor=4, cross_side=True, multi_domain=True, irreversible=False),
     "S6": dict(name="Creative fatigue", floor=2, cross_side=False, multi_domain=True, irreversible=False),
     "S7": dict(name="Invalid traffic", floor=4, cross_side=True, multi_domain=False,

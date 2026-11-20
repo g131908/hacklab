@@ -24,7 +24,10 @@ from .loader import MarketData
 ROUTES = {
     "S1": [("ads", "Is this a bid/budget/auction problem or a measurement one? Kill, hold, or scale?"),
            ("attribution", "Is the extra/missing spend buying real conversions, or is it a credit shift?")],
-    "S4": [("conversion-tracking", "Which tag/pixel/event broke, and since when? What's the real number?"),
+    "S2": [("ads", "Will the account breach its hard cap today, and which bid/budget change keeps it under?"),
+           ("attribution", "Is the extra spend buying real conversions, or is it pure cost?")],
+    "S8": [("analytics", "Demand-side or supply-side cause? Isolated to one source or marketplace-wide? How much delivery is lost?")],
+    "S4": [("conversion-tracking","Which tag/pixel/event broke, and since when? What's the real number?"),
            ("analytics", "Is the metric computed correctly? Is the baseline valid?")],
     "S6": [("marketing-psychology", "Which 2-3 behavioral principles plausibly explain it? What's the testable fix?"),
            ("ads", "Is the CTR loss hurting ROAS enough to act now, or can it wait?")],

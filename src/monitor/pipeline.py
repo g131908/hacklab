@@ -54,6 +54,16 @@ def run_once(data: MarketData, now: pd.Timestamp, cfg: dict, state: State,
         return [ev]
     detect_ms = _ms(t0)
 
+    # related signals: an overspend that threatens the hard cap is one incident, not two alerts.
+    # S1 (pacing up) on an account where S2 (cap risk) fired this hour becomes evidence of the S2 alert.
+    s2 = {d.entity: d for d in dets if d.signal == "S2" and d.fired}
+    merged = []
+    for d in dets:
+        if d.signal == "S1" and d.fired and d.direction == "up" and d.entity in s2:
+            s2[d.entity].evidence.append(f"merged S1: {d.evidence[0] if d.evidence else d.title}")
+            merged.append(d)
+    dets = [d for d in dets if d not in merged]
+
     router = router or Router(cfg)
     fired = alerted = suppressed = 0
     for det in dets:

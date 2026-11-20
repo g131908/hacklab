@@ -29,7 +29,8 @@ TEMPLATE = Path(__file__).resolve().parent / "dashboard_template.html"
 OUT = ROOT / "dashboard" / "index.html"
 WEEK = pd.Timedelta(days=7)
 H = pd.Timedelta(hours=1)
-SIGNAL_NAMES = {"S1": "Spend pacing", "S4": "Tracking break", "S6": "Creative fatigue", "S7": "Invalid traffic"}
+SIGNAL_NAMES = {"S1": "Spend pacing", "S2": "Budget cap breach risk", "S4": "Tracking break",
+                "S6": "Creative fatigue", "S7": "Invalid traffic", "S8": "Fill rate / inventory drop"}
 
 
 def _clean(values) -> list:
@@ -57,7 +58,7 @@ def _chart(title, unit, idx, series, fmt="int", note=""):
     return dict(title=title, unit=unit, fmt=fmt, note=note, ts=[_iso(t) for t in idx], series=series)
 
 
-def focus_charts(signal: str, entity: str, ts: pd.Timestamp, data: MarketData) -> list[dict]:
+def focus_charts(signal: str, entity: str, ts: pd.Timestamp, data: MarketData, cfg: dict | None = None) -> list[dict]:
     """Two small multiples per anomaly, each one axis: actual vs its baseline."""
     hours = data.wide("adv", "spend").index
     lo, hi = max(ts - pd.Timedelta(hours=36), hours.min()), min(ts + pd.Timedelta(hours=35), hours.max())
@@ -85,6 +86,41 @@ def focus_charts(signal: str, entity: str, ts: pd.Timestamp, data: MarketData) -
                    [dict(name=entity, role="actual", values=ca),
                     dict(name="same hour last week", role="baseline", values=cb)], fmt="eur2",
                    note="Price per impression up, volume flat: the overspend is bid-driven."),
+        ]
+    if signal == "S2":
+        sp = data.wide("adv", "spend")[entity]
+        day = sp.index.normalize()
+        cum = sp.groupby(day).cumsum()
+        lw_cum = cum.shift(168)                       # same weekday/hour last week
+        lw_day = sp.groupby(day).transform("sum").shift(168)
+        share = lw_cum / lw_day
+        min_share = ((cfg or {}).get("thresholds") or {}).get("s2_min_day_share", 0.15)
+        projected = (cum / share).where(share >= min_share)  # same gate as the detector: no early-morning guesses
+        cap = ((cfg or {}).get("caps", {}).get("account_daily_caps") or {}).get(entity)
+        a, _ = _hourly_pair(cum, idx)
+        b, _ = _hourly_pair(cum.shift(168).reindex(cum.index), idx)
+        series = [dict(name="projected end-of-day spend", role="actual", values=_clean(projected.reindex(idx).values))]
+        if cap is not None:
+            series.append(dict(name=f"hard daily cap (EUR {cap:,.0f})", role="baseline", values=[float(cap)] * len(idx)))
+        return [
+            _chart("Projected end-of-day spend vs cap", "EUR", idx, series, fmt="eur",
+                   note="Projection = spend so far / share of a normal day spent by this hour (shown once >= 15% of the day is in)."),
+            _chart("Spend to date (resets at midnight)", "EUR", idx,
+                   [dict(name=entity, role="actual", values=a),
+                    dict(name="same weekday last week", role="baseline", values=b)], fmt="eur"),
+        ]
+    if signal == "S8":
+        req = data.wide("sup", "ad_requests")[entity]
+        imp = data.wide("sup", "impressions")[entity]
+        fa, fb = _hourly_pair(imp / req * 100, idx)
+        ra, rb = _hourly_pair(req, idx)
+        return [
+            _chart("Fill rate per hour", "%", idx, [dict(name=entity, role="actual", values=fa),
+                                                    dict(name="same hour last week", role="baseline", values=fb)],
+                   fmt="pct"),
+            _chart("Ad requests per hour", "", idx, [dict(name=entity, role="actual", values=ra),
+                                                     dict(name="same hour last week", role="baseline", values=rb)],
+                   note="Requests on baseline while fill drops: demand is not reaching this source."),
         ]
     if signal == "S6":
         days = pd.date_range(hours.min().normalize(), hours.max().normalize(), freq="D")
@@ -151,7 +187,7 @@ def build(open_browser: bool = False) -> Path:
             if e["anomaly_id"] not in focus:
                 focus[e["anomaly_id"]] = dict(signal=r.signal, entity=r.entity,
                                               name=SIGNAL_NAMES.get(r.signal, r.signal),
-                                              charts=focus_charts(r.signal, r.entity, r.ts, data))
+                                              charts=focus_charts(r.signal, r.entity, r.ts, data, cfg))
         elif r.event == "suppressed":
             group = f"{r.ts:%Y-%m-%d}|{r.get('reason')}"
             e.update(reason=r.get("reason"), title=r.get("title"), group="SUP|" + group)
@@ -160,7 +196,7 @@ def build(open_browser: bool = False) -> Path:
                 e["trace"] = trace
                 focus["SUP|" + group] = dict(signal=r.signal, entity=r.entity,
                                              name=f"{SIGNAL_NAMES.get(r.signal, r.signal)} (suppressed)",
-                                             charts=focus_charts(r.signal, r.entity, r.ts, data))
+                                             charts=focus_charts(r.signal, r.entity, r.ts, data, cfg))
         events.append(e)
 
     evaluation = compute(truth, log) if truth else None

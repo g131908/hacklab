@@ -28,9 +28,21 @@ thresholds:
   s7_fast_conv_share: 0.30       # share of conversions < 10s after click
   s7_ip_concentration: 0.20      # top IP share of clicks
   s7_min_clicks: 50
+  s2_min_day_share: 0.15         # judge the projection only once >= 15% of a normal day's spend is in
+  s8_window_hours: 3
+  s8_fill_drop: 0.20             # fill rate -20% vs same hours last week
+  s8_requests_drop: 0.30         # or ad requests -30%
+  s8_min_expected_requests: 10000
 caps:
   hard_daily_spend_cap: 10000
   max_budget_change_pct: 20
+  account_daily_caps:            # S2: hard daily spend cap per advertiser in EUR (DEMO values, ~25% above a normal day)
+    adv_01: 5000
+    adv_02: 2800
+    adv_03: 3600
+    adv_04: 1600
+    adv_05: 3000
+    adv_06: 900
 autonomy:                        # Tier-2 actions allowed without approval (default: none)
   allowed_actions: []
   allowlist: []
@@ -55,4 +67,4 @@ known_events:
     end: "2026-11-19 00:00"      # exclusive
     scope: ["*"]
     expected_effect: "volume_drop"
-    suppress_signals: ["S1", "S4"]
+    suppress_signals: ["S1", "S4", "S8"]

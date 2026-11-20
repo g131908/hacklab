@@ -234,7 +234,101 @@ def detect_s7(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]
     return out
 
 
-HOURLY = {"S1": detect_s1, "S4": detect_s4, "S7": detect_s7}
+# ---------------------------------------------------------------- S2 budget cap breach risk
+def detect_s2(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]:
+    """Projected end-of-day spend = spend-to-date / share of a normal day's spend done by this hour
+    (same weekday last week). Fires when the projection exceeds the account's hard daily cap."""
+    th = cfg["thresholds"]
+    caps = (cfg.get("caps") or {}).get("account_daily_caps") or {}
+    spend = data.wide("adv", "spend")
+    day_start = now.normalize()
+    out = []
+    for adv in spend.columns:
+        d = Detection("S2", adv, "advertiser", now, day_start, now)
+        cap = caps.get(adv)
+        if cap is None:
+            d.baseline_ok = False
+            d.note = "no daily cap configured for this account"
+            out.append(d)
+            continue
+        actual = _sum(spend, adv, day_start, now)
+        lw_to = _sum(spend, adv, day_start - WEEK, now - WEEK)
+        lw_day = _sum(spend, adv, day_start - WEEK, day_start - WEEK + 23 * HOUR)
+        if None in (actual, lw_to, lw_day) or not lw_day:
+            d.baseline_ok = False
+            d.note = "no same-weekday baseline (need 7 days history)"
+            out.append(d)
+            continue
+        share = lw_to / lw_day
+        projected = actual / share if share > 0 else np.nan
+        d.metrics = dict(spend_to_date=actual, day_share=share, projected=projected, cap=float(cap),
+                         last_week_day=lw_day)
+        if share < th["s2_min_day_share"]:
+            d.insufficient = True
+            d.note = f"only {share:.0%} of a normal day's spend done by this hour"
+            out.append(d)
+            continue
+        d.evidence = [f"projected end-of-day spend EUR {_fmt(projected)} vs hard cap EUR {_fmt(cap)} "
+                      f"(EUR {_fmt(actual)} spent by {now + HOUR:%H:%M}; last week {share:.0%} of the day was spent by then)"]
+        if projected > cap:
+            d.fired, d.direction = True, "up"
+            d.title = f"projected EUR {_fmt(projected)} vs daily cap EUR {_fmt(cap)}"
+            d.money_at_risk_day = projected - cap
+            d.money_note = (f"~EUR {_fmt(projected - cap)} above the hard cap by end of day if the pace holds "
+                            f"(last week's same weekday: EUR {_fmt(lw_day)})")
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------- S8 fill rate / inventory drop
+def detect_s8(data: MarketData, now: pd.Timestamp, cfg: dict) -> list[Detection]:
+    th = cfg["thresholds"]
+    hrs = th["s8_window_hours"]
+    start = now - (hrs - 1) * HOUR
+    req, imp = data.wide("sup", "ad_requests"), data.wide("sup", "impressions")
+    a_sp, a_im = data.wide("adv", "spend"), data.wide("adv", "impressions")
+    lw = slice(now - WEEK, now - HOUR)
+    cpm = float(a_sp.loc[lw].sum().sum() / max(a_im.loc[lw].sum().sum(), 1) * 1000)
+    out = []
+    for src in req.columns:
+        d = Detection("S8", src, "supply", now, start, now)
+        r, r_exp = _sum(req, src, start, now), _sum(req, src, start - WEEK, now - WEEK)
+        i, i_exp = _sum(imp, src, start, now), _sum(imp, src, start - WEEK, now - WEEK)
+        if None in (r, r_exp, i, i_exp):
+            d.baseline_ok = False
+            d.note = "no same-weekday baseline"
+            out.append(d)
+            continue
+        if r_exp < th["s8_min_expected_requests"]:
+            d.insufficient = True
+            d.note = f"expected ad requests {r_exp:.0f} < {th['s8_min_expected_requests']}"
+            out.append(d)
+            continue
+        fill, fill_exp = i / r if r else 0.0, i_exp / r_exp
+        fill_ratio, req_ratio = fill / fill_exp if fill_exp else np.nan, r / r_exp
+        lost = max(i_exp - i, 0.0)
+        d.metrics = dict(fill_rate=fill, fill_rate_baseline=fill_exp, fill_ratio=fill_ratio,
+                         ad_requests=r, ad_requests_baseline=r_exp, requests_ratio=req_ratio,
+                         impressions=i, impressions_baseline=i_exp, lost_impressions=lost, cpm=cpm)
+        win = f"{start:%H:%M}-{now + HOUR:%H:%M}"
+        d.evidence = [f"fill rate {fill:.1%} vs {fill_exp:.1%} same hours last week ({win}, {fill_ratio - 1:+.0%})",
+                      f"ad requests {_fmt(r)} vs {_fmt(r_exp)} ({req_ratio - 1:+.0%}); impressions {_fmt(i)} vs {_fmt(i_exp)}"]
+        fill_hit = fill_ratio <= 1 - th["s8_fill_drop"]
+        req_hit = req_ratio <= 1 - th["s8_requests_drop"]
+        if fill_hit or req_hit:
+            d.fired, d.direction = True, "down"
+            d.title = (f"fill rate {fill:.0%} vs {fill_exp:.0%} last week" if fill_hit
+                       else f"ad requests {req_ratio - 1:+.0%} vs last week")
+            per_h = lost / hrs
+            d.money_at_risk_day = per_h * 24 * cpm / 1000
+            d.money_note = (f"~{_fmt(per_h)} impressions/h not delivered x EUR {cpm:.2f} avg advertiser CPM = "
+                            f"~EUR {_fmt(per_h * cpm / 1000)}/h of advertiser demand unserved; "
+                            f"~EUR {_fmt(d.money_at_risk_day)}/day if sustained")
+        out.append(d)
+    return out
+
+
+HOURLY = {"S1": detect_s1, "S2": detect_s2, "S4": detect_s4, "S7": detect_s7, "S8": detect_s8}
 DAILY = {"S6": detect_s6}
 
 

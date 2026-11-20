@@ -57,7 +57,10 @@ SCENARIOS = [
     dict(id="creative_fatigue", signal="S6", accept_signals=["S6"], entity="adv_02",
          entity_type="advertiser", start="2026-11-15 00:00", end="2026-11-20 00:00",
          expected="detect", description="CTR -11%/day with rising frequency"),
-    dict(id="holiday_dip", signal="S1", accept_signals=["S1", "S4"], entity="*",
+    dict(id="fill_rate_drop", signal="S8", accept_signals=["S8"], entity="src_B",
+         entity_type="supply", start="2026-11-17 13:00", end="2026-11-17 20:00",
+         expected="detect", description="Fill rate falls from ~75% to ~45% on one source, ad requests unchanged"),
+    dict(id="holiday_dip", signal="S1", accept_signals=["S1", "S2", "S4", "S8"], entity="*",
          entity_type="all", start="2026-11-18 00:00", end="2026-11-19 00:00",
          expected="suppress", description="Holiday (Buss- und Bettag): volume -50%, listed in known_events"),
 ]
@@ -142,6 +145,10 @@ def make_supply(rng: np.random.Generator, ts: pd.DatetimeIndex) -> pd.DataFrame:
 
     hol = window(df.ts, "holiday_dip")
     df.loc[hol, "req"] *= 0.5
+
+    # fill rate drop: src_B fills only ~60% of its usual share (e.g. a broken SSP/demand integration)
+    fd = window(df.ts, "fill_rate_drop") & (df.source_id == "src_B")
+    df.loc[fd, "fill_rate"] *= 0.6
 
     df["ad_requests"] = np.round(df.req).astype(int)
     df["impressions"] = np.round(df.ad_requests * df.fill_rate).astype(int)
