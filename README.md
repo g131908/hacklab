@@ -84,7 +84,8 @@ src/
   dashboard_template.html Dashboard-UI (Vanilla JS/SVG, keine externen Abhängigkeiten)
   monitor/
     loader.py             Datenquelle (CSV, später austauschbar gegen API)
-    detectors.py          S1 Pacing, S4 Tracking-Break, S6 Creative Fatigue, S7 Fraud
+    detectors.py          S1 Pacing, S2 Budget-Cap-Risiko, S4 Tracking-Break, S6 Creative Fatigue,
+                          S7 Fraud, S8 Fill-Rate/Inventory-Drop (S1 wird bei gleichzeitigem S2 in den S2-Alarm gemergt)
     selfcheck.py          Freshness, Min-Sample, Saisonalität, Known Events, Dedupe
     triage.py             Score 1-5
     routing.py            Routing an Specialist-Skills (hybrid, Depth-Guard, Panel parallel)
