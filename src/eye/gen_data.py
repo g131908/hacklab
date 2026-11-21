@@ -31,6 +31,9 @@ CATEGORIES = {"electronics": 0.30, "fashion": 0.30, "home": 0.20, "grocery": 0.2
 CART_RATE = {"electronics": 0.08, "fashion": 0.12, "home": 0.10, "grocery": 0.20}
 AOV = {"electronics": 180.0, "fashion": 60.0, "home": 85.0, "grocery": 40.0}
 PAY_OK = {"android": 0.930, "ios": 0.950, "web": 0.955}
+COGS = {"electronics": 0.70, "fashion": 0.55, "home": 0.60, "grocery": 0.72}   # cost of goods, share of list price
+DISCOUNT = 0.08                       # normal discount share of list price
+AD_CPS = 0.12                         # paid media cost per session (EUR)
 LISTED = {"electronics": 4000, "fashion": 9000, "home": 5000, "grocery": 3000}
 WEEKLY = np.array([1.00, 0.98, 0.99, 1.01, 1.05, 1.10, 1.12])  # Mon..Sun
 
@@ -43,8 +46,15 @@ SCENARIOS = [
          first_cause_event="payments-sdk android 7.4.0"),
     dict(id="fr_campaign", kind="innocent", metric="conversion_rate",
          segment={"country": "FR"}, start="2026-11-18 18:00", end="2026-11-20 00:00",
-         cause="planned FR Black Week teaser campaign: +60% low-intent paid traffic, conversion rate dilutes, orders up",
+         cause="planned FR Black Week teaser campaign (email + push, no paid media): +60% low-intent traffic, "
+               "conversion rate dilutes, orders and margin up",
          first_cause_event="FR Black Week teaser campaign"),
+    dict(id="margin_squeeze", kind="fault", metric="contribution_margin",
+         segment={"country": "NL"}, start="2026-11-16 09:00", end="2026-11-17 06:00",
+         cause="local metric up, business down: a paid social push buys traffic at 1.6x cost per session and the "
+               "For You discount-affinity boost pushes discounted products; orders rise, contribution margin falls",
+         first_cause_event=["NL paid social push", "For You: discount-affinity boost (NL)"],
+         drivers=["ad_cost", "discount_share"], trap="orders"),
     dict(id="search_relevance", kind="fault", metric="search_ctr",
          segment={"country": "DE"}, start="2026-11-19 09:00", end="2026-11-19 21:00",
          cause="search-ranker 2.3 returns irrelevant / empty results for German queries",
@@ -59,29 +69,52 @@ SCENARIOS = [
          first_cause_event=None),
 ]
 
+# Change log. deployed_at = when the change shipped; first_exposure_at = when the first users saw it (staged
+# rollouts, cache expiry, campaign go-live). Timing tests use first_exposure_at; `ts` is kept as its alias.
 EVENTS = [
     # releases (some harmless: competing explanations the agent must rule out)
-    dict(ts="2026-11-16 11:00", type="release", name="ios-app 5.2 (UI polish)", component="app",
+    dict(type="release", name="ios-app 5.2 (UI polish)", component="app", owner="mobile-ios",
+         deployed_at="2026-11-16 09:30", first_exposure_at="2026-11-16 11:00",
          country="*", platform="ios", category="*", planned=True),
-    dict(ts="2026-11-17 12:05", type="release", name="web checkout button restyle", component="checkout",
+    dict(type="campaign", name="NL paid social push", component="marketing", owner="growth-marketing",
+         deployed_at="2026-11-16 08:30", first_exposure_at="2026-11-16 09:00", end="2026-11-17 06:00",
+         country="NL", platform="*", category="*", planned=True),
+    dict(type="release", name="For You: discount-affinity boost (NL)", component="recommendations", owner="recsys",
+         deployed_at="2026-11-16 08:45", first_exposure_at="2026-11-16 09:10",
+         country="NL", platform="*", category="*", planned=True),
+    dict(type="release", name="web header i18n strings (NL)", component="app", owner="web-platform",
+         deployed_at="2026-11-16 08:50", first_exposure_at="2026-11-16 09:00",
+         country="NL", platform="web", category="*", planned=True),
+    dict(type="release", name="web checkout button restyle", component="checkout", owner="checkout-web",
+         deployed_at="2026-11-17 11:50", first_exposure_at="2026-11-17 12:05",
          country="*", platform="web", category="*", planned=True),
-    dict(ts="2026-11-17 13:40", type="release", name="payments-sdk android 7.4.0", component="payments",
+    dict(type="release", name="payments-sdk android 7.4.0", component="payments", owner="payments-mobile",
+         deployed_at="2026-11-17 12:30", first_exposure_at="2026-11-17 13:40",
          country="*", platform="android", category="*", planned=True),
-    dict(ts="2026-11-18 02:00", type="rollback", name="payments-sdk android 7.4.0 rolled back to 7.3.9",
-         component="payments", country="*", platform="android", category="*", planned=False),
-    dict(ts="2026-11-18 18:00", type="campaign", name="FR Black Week teaser campaign", component="marketing",
-         country="FR", platform="*", category="*", planned=True, end="2026-11-20 00:00"),
-    dict(ts="2026-11-19 08:50", type="release", name="search-ranker 2.3 (de locale)", component="search",
+    dict(type="rollback", name="payments-sdk android 7.4.0 rolled back to 7.3.9", component="payments",
+         owner="payments-mobile", deployed_at="2026-11-18 01:45", first_exposure_at="2026-11-18 02:00",
+         country="*", platform="android", category="*", planned=False),
+    dict(type="campaign", name="FR Black Week teaser campaign", component="marketing", owner="crm-fr",
+         deployed_at="2026-11-18 17:30", first_exposure_at="2026-11-18 18:00", end="2026-11-20 00:00",
+         country="FR", platform="*", category="*", planned=True),
+    dict(type="release", name="search-ranker 2.3 (de locale)", component="search", owner="search-relevance",
+         deployed_at="2026-11-19 08:40", first_exposure_at="2026-11-19 08:50",
          country="DE", platform="*", category="*", planned=True),
-    dict(ts="2026-11-19 10:30", type="release", name="recommendations model refresh (For You)", component="recommendations",
+    dict(type="release", name="recommendations model refresh (For You)", component="recommendations", owner="recsys",
+         deployed_at="2026-11-19 10:00", first_exposure_at="2026-11-19 10:30",
          country="*", platform="*", category="*", planned=True),
-    dict(ts="2026-11-19 21:00", type="rollback", name="search-ranker 2.3 rolled back", component="search",
+    dict(type="rollback", name="search-ranker 2.3 rolled back", component="search", owner="search-relevance",
+         deployed_at="2026-11-19 20:55", first_exposure_at="2026-11-19 21:00",
          country="DE", platform="*", category="*", planned=False),
-    dict(ts="2026-11-19 16:00", type="supply", name="Delivery delayed: Voltix wholesale PO #4471",
-         component="wholesale", country="*", platform="*", category="electronics", planned=False),
-    dict(ts="2026-11-20 05:30", type="purchasing", name="Wholesale reorder run (electronics) at normal volume",
-         component="wholesale", country="*", platform="*", category="electronics", planned=True),
+    dict(type="supply", name="Delivery delayed: Voltix wholesale PO #4471", component="wholesale",
+         owner="supply-chain", deployed_at="2026-11-19 16:00", first_exposure_at="2026-11-19 16:00",
+         country="*", platform="*", category="electronics", planned=False),
+    dict(type="purchasing", name="Wholesale reorder run (electronics) at normal volume", component="wholesale",
+         owner="purchasing-system", deployed_at="2026-11-20 05:30", first_exposure_at="2026-11-20 05:30",
+         country="*", platform="*", category="electronics", planned=True),
 ]
+for _e in EVENTS:
+    _e["ts"] = _e["first_exposure_at"]
 
 
 def hourly_shape() -> np.ndarray:
@@ -132,6 +165,13 @@ def make(seed: int):
     camp = win(f.ts, "fr_campaign") & (f.country == "FR")
     lam_sessions = np.where(camp, lam_sessions * 1.6, lam_sessions)
     cart = np.where(camp, cart * 0.72, cart)                 # paid traffic browses, buys less
+    # --- margin squeeze (NL): paid social buys traffic at 1.6x cost per session; recommendations push
+    #     discounted products, which convert better -> orders up, contribution margin down
+    ms = win(f.ts, "margin_squeeze") & (f.country == "NL")
+    lam_sessions = np.where(ms, lam_sessions * 1.35, lam_sessions)
+    cart = np.where(ms, cart * 1.15, cart)
+    disc = np.where(ms, 0.21, DISCOUNT) * rng.lognormal(0, 0.04, n)
+    cps = np.where(ms, AD_CPS * 1.6, AD_CPS) * rng.lognormal(0, 0.06, n)
     # --- payment failure: DE android
     pf = win(f.ts, "payment_failure") & (f.country == "DE") & (f.platform == "android")
     pay = np.where(pf, 0.52, pay)
@@ -151,11 +191,17 @@ def make(seed: int):
     aov = f.category.map(AOV).to_numpy() * rng.lognormal(0, 0.08, n)
     f["gmv"] = (f.orders * aov).round(2)
     f["refunds"] = rng.binomial(f.orders, 0.04)
+    f["discounts"] = (f.gmv * disc).round(2)
+    f["cogs"] = (f.gmv * f.category.map(COGS).to_numpy() * rng.lognormal(0, 0.02, n)).round(2)
+    # only paid sessions cost media money: the FR teaser runs on email + push, its extra sessions are free
+    paid_frac = np.where(camp, 1 / 1.6, 1.0)
+    f["ad_cost"] = (f.sessions * paid_frac * cps).round(2)
 
     # --- late data: orders_db rows only ~40% arrived for the last 3 hours
     comp = []
     sources = {"web_analytics": ["sessions", "searches", "zero_result_searches", "product_views", "add_to_carts"],
-               "orders_db": ["checkouts", "payment_attempts", "orders", "gmv", "refunds"],
+               "orders_db": ["checkouts", "payment_attempts", "orders", "gmv", "refunds", "discounts", "cogs"],
+               "ads_platform": ["ad_cost"],
                "inventory": ["listed_skus", "in_stock_skus"]}
     for src in sources:
         c = pd.DataFrame(dict(ts=hours, source=src, completeness=1.0))
@@ -168,7 +214,7 @@ def make(seed: int):
     cmap = comp[comp.source == "orders_db"].set_index("ts").completeness
     frac = f.loc[late_rows, "ts"].map(cmap)
     for col in sources["orders_db"]:
-        f.loc[late_rows, col] = (f.loc[late_rows, col] * frac).round(0 if col != "gmv" else 2)
+        f.loc[late_rows, col] = (f.loc[late_rows, col] * frac).round(2 if col in ("gmv", "discounts", "cogs") else 0)
 
     inv = inv[["ts", "category", "listed_skus", "in_stock_skus"]]
     ev = pd.DataFrame(EVENTS)
@@ -176,12 +222,12 @@ def make(seed: int):
 
 
 def main():
+    global OUT
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", default=str(OUT), help="output folder (default data/eye)")
     args = ap.parse_args()
     f, inv, ev, comp = make(args.seed)
-    global OUT
     OUT = Path(args.out)
     OUT.mkdir(parents=True, exist_ok=True)
     f.to_csv(OUT / "facts.csv", index=False)

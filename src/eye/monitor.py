@@ -25,7 +25,7 @@ import pandas as pd
 from . import detect
 from .detect import seg_text
 from .graph import MetricGraph
-from .investigate import Investigator
+from .investigate import LABEL_RANK, Investigator
 from .store import NotApplicable, Store
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +55,8 @@ class Incident:
     review: dict | None = None
     resolved_at: str | None = None
     explains: list = field(default_factory=list)   # symptoms attributed to this incident without a new report
+    confidence_label: str = ""                     # descriptive | associational | causal_evidence | inconclusive
+    changes: list = field(default_factory=list)    # change-log entries around the onset, all tested (with owner)
 
 
 def severity(inv) -> int:
@@ -145,7 +147,7 @@ class Monitor:
         out, frontier = {metric}, [metric]
         while frontier:
             m = frontier.pop()
-            for p in g.parents(m):
+            for p in g.parents(m, ratios=True):
                 if p not in out:
                     out.add(p)
                     frontier.append(p)
@@ -247,9 +249,14 @@ class Monitor:
                 escalated = sev > inc.severity
                 inc.updates.append(dict(at=str(now), text=f"{r.metric}[{r.seg_text()}] also traced to this incident"
                                         + (f"; severity raised to {sev}" if escalated else "")))
-                if escalated:   # re-report only when it got worse; otherwise update silently
-                    inc.severity, inc.reports, inc.investigation = sev, inc.reports + 1, inv.to_dict()
-                    inc.headline = inv.headline
+                stronger = LABEL_RANK.get(inv.confidence_label, 0) > LABEL_RANK.get(inc.confidence_label, 0)
+                if escalated or stronger:   # re-report only when it got worse or the evidence got stronger
+                    inc.severity, inc.reports, inc.investigation = max(sev, inc.severity), inc.reports + 1, inv.to_dict()
+                    inc.headline, inc.confidence_label = inv.headline, inv.confidence_label
+                    inc.changes = inv.changes or inc.changes
+                    if stronger and not escalated:
+                        inc.updates.append(dict(at=str(now), text=f"evidence now {inv.confidence_label}"))
+                        escalated = True
                 report["investigations"].append(dict(incident=inc.id, new=False, escalated=escalated, **self._brief(inv)))
             elif inc and inc.resolved_at and now - pd.Timestamp(inc.resolved_at) <= pd.Timedelta(hours=REOPEN_H):
                 # same root cause back within hours of resolving (e.g. a quiet night in between): same incident
@@ -262,7 +269,8 @@ class Monitor:
                 self.seq += 1
                 iid = f"I{self.seq:03d}"
                 inc = Incident(iid, inv.signature, inv.classification, "open", str(now), str(now), sev, inv.headline,
-                               inv.segment or r.segment, inv.chain or [r.metric], inv.to_dict())
+                               inv.segment or r.segment, inv.chain or [r.metric], inv.to_dict(),
+                               confidence_label=inv.confidence_label, changes=inv.changes)
                 # Claude reviews the ledger once, when the incident opens (never on updates): 1 call per incident
                 if self.reviewer and inv.classification != "data_incomplete":
                     try:
@@ -319,4 +327,5 @@ class Monitor:
     def _brief(inv) -> dict:
         sup = next((h.cause for h in inv.hypotheses if h.status == "supported"), None)
         return dict(classification=inv.classification, headline=inv.headline, segment=seg_text(inv.segment),
-                    chain=inv.chain, supported=sup, steps=len(inv.steps), uncertainty=inv.uncertainty[:3])
+                    chain=inv.chain, supported=sup, steps=len(inv.steps), uncertainty=inv.uncertainty[:3],
+                    label=inv.confidence_label, stop=inv.stop_reason, changes=inv.changes, branches=inv.branches)

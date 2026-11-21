@@ -33,6 +33,7 @@ class Expr:
     metrics: list[str]          # referenced metric names
     columns: list[str]          # sum(<column>) references
     kind: str                   # base | ratio | product | sum | other
+    terms: list = field(default_factory=list)   # sum kind: [(sign, metric), ...]
 
     @staticmethod
     def parse(text: str) -> "Expr":
@@ -63,7 +64,19 @@ class Expr:
             kind = "sum"
         else:
             kind = "other"
-        return Expr(text, tree, sorted(set(metrics)), sorted(set(columns)), kind)
+        out = Expr(text, tree, sorted(set(metrics)), sorted(set(columns)), kind)
+        out.terms = _signed_terms(tree) if kind == "sum" else []
+        return out
+
+
+def _signed_terms(node, sign: int = 1) -> list[tuple[int, str]]:
+    """a - b + c - d  ->  [(+1, a), (-1, b), (+1, c), (-1, d)]; only metric names as leaves."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+        right = 1 if isinstance(node.op, ast.Add) else -1
+        return _signed_terms(node.left, sign) + _signed_terms(node.right, sign * right)
+    if isinstance(node, ast.Name):
+        return [(sign, node.id)]
+    return []
 
 
 def _is_call_arg(tree, name_node) -> bool:

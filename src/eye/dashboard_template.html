@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eye of the System</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --chip: #f0efec;
+  --accent: #2a78d6; --accent-soft: rgba(42,120,214,0.10);
+  --e-formula: #2a78d6; --e-composite: #6250d6; --e-cause: #898781;
+  --good: #0ca30c; --good-text: #006300; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --l-causal: #006300; --l-assoc: #2a78d6; --l-inconcl: #b46a00; --l-desc: #52514e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --chip: #2c2c2a;
+    --accent: #3987e5; --accent-soft: rgba(57,135,229,0.16);
+    --e-formula: #3987e5; --e-composite: #9085e9; --e-cause: #898781; --good-text: #0ca30c;
+    --l-causal: #0ca30c; --l-assoc: #3987e5; --l-inconcl: #e0a030; --l-desc: #c3c2b7;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --chip: #2c2c2a;
+  --accent: #3987e5; --accent-soft: rgba(57,135,229,0.16);
+  --e-formula: #3987e5; --e-composite: #9085e9; --e-cause: #898781; --good-text: #0ca30c;
+  --l-causal: #0ca30c; --l-assoc: #3987e5; --l-inconcl: #e0a030; --l-desc: #c3c2b7;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 16px 20px 40px; }
+header.top { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+h1 { font-size: 21px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.chip-label { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; background: var(--ink); color: var(--surface); margin-left: 8px; vertical-align: 2px; }
+.meta { color: var(--ink-2); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; margin-top: 14px; }
+.kpi { padding: 12px 14px; }
+.kpi .k { font-size: 12px; color: var(--ink-2); }
+.kpi .v { font-size: 26px; font-weight: 650; margin-top: 2px; }
+.kpi .s { font-size: 12px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+.card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 14px 0; flex-wrap: wrap; }
+.card-h h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.sub { color: var(--muted); font-size: 12px; }
+.card-b { padding: 8px 14px 14px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.graph-wrap { overflow-x: auto; border-top: 1px solid var(--grid); }
+.graph-wrap svg { display: block; }
+.node rect { fill: var(--surface); stroke: var(--axis); stroke-width: 1; rx: 6; }
+.node text { font-size: 11.5px; fill: var(--ink); }
+.node .tier { fill: var(--muted); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; }
+.node.root rect { stroke: var(--ink-2); stroke-width: 1.5; }
+.node.hit rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+.node.leaf rect { stroke: var(--critical); stroke-width: 2.5; }
+.node.dim { opacity: .35; }
+.edge { fill: none; stroke-width: 1.4; }
+.edge.formula { stroke: var(--e-formula); }
+.edge.composite { stroke: var(--e-composite); stroke-dasharray: 2 3; }
+.edge.possible_cause { stroke: var(--e-cause); stroke-dasharray: 5 4; }
+.edge.hit { stroke-width: 3; }
+.edge.dim { opacity: .18; }
+.gtip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-width: 360px; z-index: 30; }
+.gtip b { display: block; margin-bottom: 2px; }
+.gtip code { font: 11.5px ui-monospace, Consolas, monospace; }
+.feed { max-height: 760px; overflow: auto; padding: 4px 10px 12px; }
+.inc { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-top: 8px; cursor: pointer; background: var(--surface); }
+.inc:hover { border-color: var(--axis); }
+.inc.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.inc:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row1 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.when { color: var(--muted); font-size: 12px; margin-left: auto; }
+.hl { font-weight: 600; margin-top: 4px; overflow-wrap: anywhere; }
+.badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: #fff; }
+.b-ALERT { background: var(--critical); } .b-INFO { background: var(--accent); } .b-DATA { background: var(--muted); } .b-NOTE { background: var(--chip); color: var(--ink-2); }
+.chip { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--ink-2); }
+.lab { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1.5px solid currentColor; }
+.lab.causal_evidence { color: var(--l-causal); } .lab.associational { color: var(--l-assoc); }
+.lab.inconclusive { color: var(--l-inconcl); } .lab.descriptive { color: var(--l-desc); }
+.detail h3 { font-size: 16px; margin: 4px 0 6px; overflow-wrap: anywhere; }
+.sec { margin-top: 14px; }
+.sec h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+.branches { display: flex; flex-direction: column; gap: 6px; }
+.branch { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; }
+.branch .m { padding: 2px 8px; border-radius: 6px; background: var(--chip); }
+.branch .m.leaf { background: var(--accent-soft); color: var(--ink); font-weight: 600; border: 1px solid var(--accent); }
+.branch .arr { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; }
+.st-supported { color: var(--good-text); font-weight: 600; } .st-hypothesis { color: var(--ink-2); } .st-ruled_out { color: var(--muted); text-decoration: line-through; }
+.unc li { margin: 2px 0; color: var(--ink-2); }
+.trail { list-style: none; padding: 0; margin: 0; }
+.trail li { border-left: 2px solid var(--grid); padding: 4px 0 8px 12px; position: relative; }
+.trail li::before { content: ""; position: absolute; left: -6px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--axis); }
+.trail li.k-stop::before, .trail li.k-conclude::before { background: var(--ink); border-color: var(--ink); }
+.trail li.k-did::before { border-color: var(--l-causal); }
+.trail .t { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.trail .id { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); }
+.trail .kind { font-size: 11px; color: var(--ink-2); background: var(--chip); border-radius: 4px; padding: 0 5px; }
+.trail .ti { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.trail .dec { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; overflow-wrap: anywhere; }
+details { margin-top: 3px; }
+summary { cursor: pointer; font-size: 12px; color: var(--accent); width: fit-content; }
+pre { white-space: pre-wrap; font: 11.5px/1.45 ui-monospace, Consolas, monospace; background: var(--page); border: 1px solid var(--grid); border-radius: 6px; padding: 8px; margin: 6px 0 0; max-height: 280px; overflow: auto; }
+.ok { color: var(--good-text); font-weight: 600; } .bad { color: var(--critical); font-weight: 600; } .na { color: var(--muted); }
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+.controls label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.btn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--chip); color: var(--ink); cursor: pointer; }
+footer { color: var(--muted); font-size: 12px; margin-top: 18px; }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0,1fr); } .kpis { grid-template-columns: repeat(3, minmax(0,1fr)); } .feed { max-height: none; } }
+@media (max-width: 560px) { .wrap { padding: 12px 16px 32px; } .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Eye of the System <span class="chip-label" id="dataLabel"></span></h1>
+      <div class="meta" id="metaLine"></div>
+    </div>
+    <div class="meta">observe → detect → localize (WHERE) → decompose (WHAT) → explain (WHY) → evidence → report</div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Scorecard"></section>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="gTitle">
+      <div class="card-h">
+        <div><h2 id="gTitle">Metric graph</h2><div class="sub" id="gSub"></div></div>
+        <div class="controls">
+          <label><input type="checkbox" id="showCause" checked> possible causes</label>
+          <label><input type="checkbox" id="showComposite" checked> composites</label>
+          <button class="btn" id="clearSel" type="button">Show whole graph</button>
+        </div>
+      </div>
+      <div class="card-b">
+        <div class="legend">
+          <span><i style="border-color:var(--e-formula)"></i>formula (exact arithmetic)</span>
+          <span><i style="border-color:var(--e-composite);border-top-style:dotted"></i>composite (validated product)</span>
+          <span><i style="border-color:var(--e-cause);border-top-style:dashed"></i>possible cause (hypothesis)</span>
+          <span><i style="border-color:var(--critical);border-top-width:3px"></i>proximate metric of the selected incident</span>
+        </div>
+        <div class="graph-wrap" id="graph"></div>
+        <div class="sub" id="gLog" style="margin-top:6px"></div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="fTitle">
+      <div class="card-h"><div><h2 id="fTitle">Incidents</h2><div class="sub">opened by the agent on its own · click for the investigation</div></div></div>
+      <div class="feed" id="feed"></div>
+    </section>
+  </div>
+
+  <section class="card detail" id="detail" style="margin-top:14px" aria-labelledby="dTitle">
+    <div class="card-h"><div><h2 id="dTitle">Investigation</h2><div class="sub" id="dSub">select an incident</div></div></div>
+    <div class="card-b" id="dBody"></div>
+  </section>
+
+  <section class="card" style="margin-top:14px" aria-labelledby="sTitle">
+    <div class="card-h"><div><h2 id="sTitle">Scorecard vs injected ground truth</h2><div class="sub">replay of all hours, deterministic agent (no LLM)</div></div></div>
+    <div class="card-b table-wrap" id="score"></div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+<div class="gtip" id="gtip" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+(function () {
+  "use strict";
+  if (!DATA) { document.body.textContent = "No data embedded. Run: python src/eye/dashboard.py"; return; }
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const NS = "http://www.w3.org/2000/svg";
+  const sv = (tag, a) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const pct = (x) => x == null ? "–" : (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
+  const eur = (x) => x == null ? "–" : (x >= 0 ? "+" : "−") + "€" + Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const short = (ts) => ts ? ts.replace("2026-", "").slice(0, 11).replace("T", " ") : "–";
+  const KIND = { fault: "ALERT", unexplained: "ALERT", innocent: "INFO", data_incomplete: "DATA" };
+  const segText = (s) => Object.entries(s || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "total";
+  let selected = null;
+
+  // ------------------------------------------------------------ header + KPIs
+  const m = DATA.meta;
+  $("dataLabel").textContent = m.label;
+  $("metaLine").textContent = `marketplace · ${short(m.start)} – ${short(m.end)} hourly · ${m.metrics} metrics, ${m.edges} edges in the graph · generated ${m.generated}`;
+  $("foot").textContent = `${m.label} · synthetic marketplace with injected faults, an innocent change, a data issue and decoy releases. Evidence levels: descriptive < associational < causal_evidence (diff-in-diff interval excludes 0); inconclusive = data cannot separate explanations.`;
+  const sc = DATA.scorecard;
+  const kp = $("kpis");
+  const tile = (k, v, s) => { const c = el("div", "card kpi"); c.append(el("div", "k", k), el("div", "v", v), el("div", "s", s)); kp.appendChild(c); };
+  if (sc) {
+    const s = sc.summary;
+    tile("Scenarios fully correct", `${s.fully_correct} / ${s.scenarios}`, "place, first cause, handling, evidence");
+    tile("Detected", `${s.detected} / ${s.scenarios}`, "faults, innocent change, data issue");
+    tile("False alarms", String(s.false_alarms), "paged incidents with no scenario");
+    tile("Median time to detect", s.median_ttd_faults_h == null ? "–" : `${Math.round(s.median_ttd_faults_h)} h`, "faults, onset → incident");
+    tile("Incidents opened", String(s.incidents_total), `${DATA.incidents.filter(i => i.status === "open").length} still open at the end`);
+  }
+
+  // ------------------------------------------------------------ graph (layered, left -> right)
+  const nodes = DATA.graph.nodes, byName = Object.fromEntries(nodes.map(n => [n.name, n]));
+  const allEdges = DATA.graph.edges.filter(e => byName[e.src] && byName[e.dst] && e.type !== "definition");
+  function layout(edges) {
+    const kids = {}; nodes.forEach(n => kids[n.name] = []);
+    edges.filter(e => e.type !== "possible_cause").forEach(e => kids[e.src].push(e.dst));
+    const depth = {}; const roots = nodes.filter(n => n.tier === "outcome" || n.tier === "kpi").map(n => n.name);
+    const visit = (n, d, seen) => { if (seen.has(n)) return; if ((depth[n] ?? -1) < d) depth[n] = d; seen.add(n); kids[n].forEach(c => visit(c, d + 1, seen)); seen.delete(n); };
+    roots.forEach(r => visit(r, 0, new Set()));
+    // unreached nodes: one column right of their cause target, or after the deepest column
+    const maxd = Math.max(...Object.values(depth));
+    nodes.forEach(n => {
+      if (depth[n.name] != null) return;
+      const ce = DATA.graph.edges.find(e => e.type === "possible_cause" && e.dst === n.name && depth[e.src] != null);
+      depth[n.name] = ce ? depth[ce.src] + 1 : maxd + 1;
+    });
+    nodes.forEach(n => { if (kids[n.name].length === 0 && depth[n.name] < 1) depth[n.name] = 1; });
+    const cols = {}; nodes.forEach(n => (cols[depth[n.name]] = cols[depth[n.name]] || []).push(n.name));
+    const pos = {}, order = Object.keys(cols).map(Number).sort((a, b) => a - b);
+    order.forEach(d => {
+      const list = cols[d];
+      list.sort((a, b) => {
+        const pa = edges.filter(e => e.dst === a && pos[e.src]).map(e => pos[e.src].y), pb = edges.filter(e => e.dst === b && pos[e.src]).map(e => pos[e.src].y);
+        const ma = pa.length ? pa.reduce((x, y) => x + y) / pa.length : 1e6, mb = pb.length ? pb.reduce((x, y) => x + y) / pb.length : 1e6;
+        return ma - mb || a.localeCompare(b);
+      });
+      list.forEach((n, i) => pos[n] = { x: 12 + d * 196, y: 14 + i * 34 });
+    });
+    return pos;
+  }
+  function drawGraph() {
+    const host = $("graph"); host.textContent = "";
+    const edges = allEdges.filter(e => (e.type !== "possible_cause" || $("showCause").checked) && (e.type !== "composite" || $("showComposite").checked));
+    const pos = layout(edges);
+    const W = Math.max(...Object.values(pos).map(p => p.x)) + 190, H = Math.max(...Object.values(pos).map(p => p.y)) + 40;
+    const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "metric graph" });
+    const inc = selected && DATA.incidents.find(i => i.id === selected);
+    const chain = new Set(inc ? inc.chain : []);
+    const leaves = new Set(inc ? ((inc.investigation.branches || []).map(b => b[b.length - 1]).concat(inc.chain.slice(-1))) : []);
+    const NW = 168, NH = 24;
+    edges.forEach(e => {
+      const a = pos[e.src], b = pos[e.dst]; if (!a || !b) return;
+      const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2;
+      const back = x2 <= x1;
+      const d = back ? `M${a.x + NW / 2},${a.y + NH} C${a.x + NW / 2},${y2 + 40} ${b.x + NW / 2},${y2 + 40} ${b.x + NW / 2},${b.y + NH}`
+                     : `M${x1},${y1} C${x1 + 40},${y1} ${x2 - 40},${y2} ${x2},${y2}`;
+      const hit = inc && chain.has(e.src) && chain.has(e.dst);
+      svg.appendChild(sv("path", { d, class: `edge ${e.type}${hit ? " hit" : ""}${inc && !hit ? " dim" : ""}` }));
+    });
+    nodes.forEach(n => {
+      const p = pos[n.name]; if (!p) return;
+      const cls = ["node", n.tier ? "root" : "", chain.has(n.name) ? "hit" : "", leaves.has(n.name) ? "leaf" : "", inc && !chain.has(n.name) ? "dim" : ""].join(" ");
+      const g = sv("g", { class: cls, transform: `translate(${p.x},${p.y})`, tabindex: 0 });
+      g.appendChild(sv("rect", { width: NW, height: NH }));
+      const t = sv("text", { x: 8, y: 16 }); t.textContent = n.name.length > 24 ? n.name.slice(0, 23) + "…" : n.name; g.appendChild(t);
+      if (n.tier || n.added_by !== "catalog") { const tt = sv("text", { x: NW - 6, y: 15, "text-anchor": "end", class: "tier" }); tt.textContent = n.added_by !== "catalog" ? "new" : n.tier; g.appendChild(tt); }
+      const show = (ev) => {
+        const tip = $("gtip"); tip.textContent = "";
+        tip.append(el("b", null, n.name));
+        tip.append(el("div", null, n.description || ""));
+        const c = el("code", null, `${n.name} = ${n.expr}`); tip.append(c);
+        tip.append(el("div", "sub", `kind ${n.kind} · unit ${n.unit || "-"} · by ${n.dims.join(", ") || "-"} · source ${n.sources.join(", ")}`));
+        tip.hidden = false; tip.style.left = Math.min(ev.clientX + 14, innerWidth - 380) + "px"; tip.style.top = (ev.clientY + 12) + "px";
+      };
+      g.addEventListener("mousemove", show); g.addEventListener("focus", (ev) => { const r = g.getBoundingClientRect(); show({ clientX: r.right, clientY: r.top }); });
+      g.addEventListener("mouseleave", () => $("gtip").hidden = true); g.addEventListener("blur", () => $("gtip").hidden = true);
+      svg.appendChild(g);
+    });
+    host.appendChild(svg);
+    $("gSub").textContent = inc ? `highlighted: ${inc.id} · ${inc.chain.join(" → ")}` : "derived from metric definitions, every formula validated on the data · hover a metric";
+    $("gLog").textContent = (DATA.graph.log || []).map(x => "• " + x).join("  ");
+  }
+  ["showCause", "showComposite"].forEach(id => $(id).addEventListener("change", drawGraph));
+  $("clearSel").addEventListener("click", () => { selected = null; renderAll(); });
+
+  // ------------------------------------------------------------ feed
+  function labChip(l) { const c = el("span", "lab " + (l || "descriptive"), l || "–"); return c; }
+  function renderFeed() {
+    const host = $("feed"); host.textContent = "";
+    const list = [...DATA.incidents].sort((a, b) => a.opened.localeCompare(b.opened));
+    if (!list.length) host.appendChild(el("div", "sub", "No incidents."));
+    list.forEach(i => {
+      const c = el("div", "inc" + (selected === i.id ? " sel" : "")); c.tabIndex = 0;
+      const r = el("div", "row1");
+      const kind = KIND[i.classification] || "NOTE";
+      r.append(el("span", "badge b-" + kind, kind), labChip(i.confidence_label), el("span", "chip", i.id),
+               el("span", "chip", i.status === "open" ? "open" : "resolved " + short(i.resolved_at)), el("span", "when", short(i.opened)));
+      c.append(r, el("div", "hl", i.headline.replace(/^\[[a-z_]+\] /, "")));
+      const chips = el("div", "row1"); chips.style.marginTop = "6px";
+      chips.append(el("span", "chip", segText(i.segment)));
+      if ((i.explains || []).length) chips.append(el("span", "chip", `${i.explains.length} symptom(s) absorbed`));
+      const conc = (i.changes || []).filter(x => Object.keys(x.verdicts || {}).length);
+      if (conc.length > 1) chips.append(el("span", "chip", `${conc.length} concurrent changes tested`));
+      c.appendChild(chips);
+      const pick = () => { selected = i.id; renderAll(); $("detail").scrollIntoView({ behavior: "smooth", block: "start" }); };
+      c.addEventListener("click", pick); c.addEventListener("keydown", (e) => { if (e.key === "Enter") pick(); });
+      host.appendChild(c);
+    });
+  }
+
+  // ------------------------------------------------------------ detail
+  function table(headers, rows) {
+    const t = el("table"), th = el("tr");
+    headers.forEach(h => th.appendChild(el("th", null, h))); const thead = el("thead"); thead.appendChild(th); t.appendChild(thead);
+    const tb = el("tbody"); rows.forEach(r => { const tr = el("tr"); r.forEach(c => { const td = el("td"); if (c instanceof Node) td.appendChild(c); else td.textContent = c; tr.appendChild(td); }); tb.appendChild(tr); });
+    t.appendChild(tb); const w = el("div", "table-wrap"); w.appendChild(t); return w;
+  }
+  function sec(title, body) { const s = el("div", "sec"); s.appendChild(el("h4", null, title)); s.appendChild(body); return s; }
+  function renderDetail() {
+    const body = $("dBody"); body.textContent = "";
+    const i = selected && DATA.incidents.find(x => x.id === selected);
+    if (!i) { $("dSub").textContent = "select an incident in the feed"; return; }
+    const inv = i.investigation;
+    $("dTitle").textContent = `Investigation ${i.id}`;
+    $("dSub").textContent = `opened ${short(i.opened)} · ${inv.steps.length} queries · stop ${inv.stop_reason || "–"} · planner: ${inv.planner}`;
+    const head = el("div", "row1"); head.append(el("span", "badge b-" + (KIND[i.classification] || "NOTE"), KIND[i.classification] || "NOTE"), labChip(i.confidence_label), el("span", "chip", "segment " + segText(i.segment)));
+    if (inv.trap) head.append(el("span", "chip", `trap avoided: ${inv.trap} rose`));
+    body.append(head, el("h3", null, i.headline.replace(/^\[[a-z_]+\] /, "")));
+
+    const br = el("div", "branches");
+    const branches = (inv.branches && inv.branches.length) ? inv.branches : [inv.chain];
+    branches.forEach(b => {
+      const row = el("div", "branch");
+      b.forEach((mname, k) => { if (k) row.append(el("span", "arr", "→")); row.append(el("span", "m" + (k === b.length - 1 ? " leaf" : ""), mname)); });
+      br.appendChild(row);
+    });
+    body.appendChild(sec("Where it is and what carries it (symptom → proximate metric)", br));
+
+    const hyps = [...inv.hypotheses].sort((a, b) => ({ supported: 0, hypothesis: 1, ruled_out: 2 }[a.status] - { supported: 0, hypothesis: 1, ruled_out: 2 }[b.status]) || b.score - a.score);
+    body.appendChild(sec("Explanations tested", table(["status", "evidence", "explanation", "for", "why", "ledger"], hyps.map(h => [
+      el("span", "st-" + h.status, h.status), h.label ? labChip(h.label) : el("span", "na", "–"), h.cause,
+      (h.checks && (h.checks.leaf || h.checks.metric)) || "–",
+      (h.status === "ruled_out" ? h.against : h.evidence).slice(0, 3).join("; "), h.refs.join(" ")]))));
+
+    const conc = (inv.changes || []).filter(x => Object.keys(x.verdicts || {}).length);
+    if (conc.length) body.appendChild(sec(`Changes in the same window (${conc.length}, all tested)`, table(["change", "owner", "deployed", "first exposure", "verdict per proximate metric"], conc.map(c => [
+      c.name, c.owner, short(c.deployed_at), short(c.first_exposure_at),
+      Object.entries(c.verdicts).map(([k, v]) => `${k}: ${v.status}`).join("; ")]))));
+
+    const dids = Object.values(inv.did || {});
+    if (dids.length) body.appendChild(sec("Difference-in-differences (affected segment vs rest, 24h before vs since onset)", table(["metric", "effect", "95% interval", "hours pre/post", "verdict"], dids.map(d => [
+      d.metric, d.ok ? (d.effect_pct != null ? pct(d.effect_pct) : d.effect.toFixed(4)) : "–",
+      d.ok ? (d.ci95_pct ? `${pct(d.ci95_pct[0])} .. ${pct(d.ci95_pct[1])}` : `${d.ci95[0].toFixed(4)} .. ${d.ci95[1].toFixed(4)}`) : (d.reason || "–"),
+      d.ok ? `${d.n_pre} / ${d.n_post}` : "–", labChip(d.significant ? "causal_evidence" : "inconclusive")]))));
+
+    const imp = inv.impact || {};
+    if (Object.keys(imp).length) body.appendChild(sec("Business impact in the affected segment (3h window)", table(["outcome", "actual", "expected", "change", "per hour"], Object.entries(imp).map(([k, v]) => [
+      k, Math.round(v.actual).toLocaleString("en-US"), Math.round(v.expected).toLocaleString("en-US"), pct(v.rel), k === "orders" ? (v.per_hour >= 0 ? "+" : "") + v.per_hour.toFixed(0) : eur(v.per_hour)]))));
+
+    if ((inv.uncertainty || []).length) { const u = el("ul", "unc"); inv.uncertainty.forEach(x => u.appendChild(el("li", null, x))); body.appendChild(sec("What remains uncertain", u)); }
+    if ((i.explains || []).length) body.appendChild(sec("Symptoms attributed to this incident (not re-reported)", table(["metric", "segment", "first", "change", "why"], i.explains.map(x => [x.metric, x.segment, short(x.first), pct(x.rel), x.why]))));
+    if ((i.updates || []).length) body.appendChild(sec("Lifecycle", table(["at", "update"], i.updates.map(u => [short(u.at), u.text]))));
+
+    const tr = el("ol", "trail");
+    inv.steps.forEach(s => {
+      const li = el("li", "k-" + s.kind);
+      const t = el("div", "t"); t.append(el("span", "id", s.id), el("span", "kind", s.kind)); if (s.label) t.append(labChip(s.label)); t.append(el("span", "ti", s.title));
+      li.append(t, el("div", "dec", s.decision));
+      const d = el("details"); d.append(el("summary", null, "query + numbers"), el("pre", null, JSON.stringify({ query: s.query, result: s.result, options: s.options }, null, 1)));
+      li.appendChild(d); tr.appendChild(li);
+    });
+    body.appendChild(sec("Evidence ledger (every claim above cites these ids)", tr));
+  }
+
+  // ------------------------------------------------------------ scorecard
+  function renderScore() {
+    const host = $("score"); host.textContent = "";
+    if (!sc) { host.appendChild(el("div", "sub", "No ground truth for this dataset (live data).")); return; }
+    const yn = (v) => v == null ? el("span", "na", "n/a") : el("span", v ? "ok" : "bad", v ? "✓" : "✗");
+    host.appendChild(table(["scenario", "kind", "detected", "time to detect", "place", "first cause", "handling", "evidence", "found"], sc.scenarios.map(r => [
+      r.id.replace(/_/g, " "), r.kind, yn(r.detected), r.ttd_h == null ? "–" : `${Math.round(r.ttd_h)} h`, yn(r.place), yn(r.first_cause), yn(r.handling),
+      r.evidence_found || "–", [r.handling_found, r.place_found, r.cause_found].filter(Boolean).join(" | ")])));
+    if (sc.false_alarms.length) host.appendChild(sec("False alarms", table(["id", "opened", "headline"], sc.false_alarms.map(f => [f.id, short(f.opened), f.headline]))));
+    const fail = sc.scenarios.filter(r => r.problems.length);
+    if (fail.length) { const u = el("ul", "unc"); fail.forEach(r => r.problems.forEach(p => u.appendChild(el("li", null, `${r.id}: ${p}`)))); host.appendChild(sec("Still failing", u)); }
+  }
+
+  function renderAll() { renderFeed(); drawGraph(); renderDetail(); }
+  const first = DATA.incidents.find(i => i.classification === "fault" && (i.investigation.branches || []).length > 1) || DATA.incidents[0];
+  selected = first ? first.id : null;
+  renderAll(); renderScore();
+})();
+</script>
+</body>
+</html>

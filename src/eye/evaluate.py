@@ -11,6 +11,11 @@ Per scenario
   first cause  the scenario's first_cause_event is the incident's named cause (n/a for data scenarios)
   handling     fault -> ALERT incident (someone is paged); innocent -> INFO note only, nobody paged;
                data -> DATA notice only, nobody paged
+  drivers      (if the scenario lists them) every driver metric is on the incident's chain
+  trap         (if the scenario has one) the incident is a fault on the business outcome, not good news about
+               the local metric that went up
+  evidence     the incident's confidence_label (descriptive | associational | causal_evidence | inconclusive);
+               faults and innocent changes need causal_evidence, data issues are descriptive
 False alarms = paged incidents (ALERT) that belong to no scenario. Unexplained positive NOTEs and extra
 INFO/DATA notes are listed separately; they do not page anyone.
 """
@@ -37,13 +42,18 @@ def kind_of(inc) -> str:
         inc.classification, "NOTE")
 
 
+def causes_of(sc) -> list:
+    fc = sc.get("first_cause_event")
+    return [] if not fc else (fc if isinstance(fc, list) else [fc])
+
+
 def belongs(inc, sc) -> bool:
     opened = pd.Timestamp(inc.opened)
     if not (pd.Timestamp(sc["start"]) <= opened < pd.Timestamp(sc["end"]) + GRACE):
         return False
     if sc["kind"] == "data":
         return inc.classification == "data_incomplete"
-    if sc.get("first_cause_event") and sc["first_cause_event"] in inc.signature:
+    if any(e in inc.signature for e in causes_of(sc)):
         return True
     seg_ok = all(inc.segment.get(k) == v for k, v in sc["segment"].items())
     return seg_ok and sc["metric"] in inc.chain
@@ -57,7 +67,7 @@ def score(incidents: list, truth: dict) -> dict:
         row = dict(id=sc["id"], kind=sc["kind"], metric=sc["metric"], segment=sc["segment"], start=sc["start"],
                    expected=EXPECTED[sc["kind"]], detected=bool(mine), incidents=[i.id for i in mine],
                    ttd_h=None, place=None, place_found=None, first_cause=None, cause_found=None,
-                   handling=None, handling_found=None, problems=[])
+                   handling=None, handling_found=None, drivers=None, evidence=None, evidence_found=None, problems=[])
         if not mine:
             row["problems"].append("not detected")
             rows.append(row)
@@ -74,13 +84,31 @@ def score(incidents: list, truth: dict) -> dict:
             if not row["place"]:
                 row["problems"].append(f"place: found {row['place_found']}, expected {sc['metric']} in "
                                        + (",".join(f"{k}={v}" for k, v in sorted(sc['segment'].items())) or "total"))
-            if sc.get("first_cause_event"):
-                hit = next((i for i in mine if sc["first_cause_event"] in i.signature), None)
+            want_causes = causes_of(sc)
+            if want_causes:
+                hit = next((i for i in mine if all(e in i.signature for e in want_causes)), None)
                 row["first_cause"] = hit is not None
                 row["cause_found"] = (hit or first).signature.split("|", 1)[-1]
                 if not hit:
                     row["problems"].append(f"first cause: named '{row['cause_found']}', expected "
-                                           f"'{sc['first_cause_event']}'")
+                                           f"'{' + '.join(want_causes)}'")
+            if sc.get("drivers"):
+                chain = set().union(*[set(i.chain) for i in mine])
+                missing = [d for d in sc["drivers"] if d not in chain]
+                row["drivers"] = not missing
+                if missing:
+                    row["problems"].append(f"drivers: {', '.join(missing)} not found (stopped at the local metric?)")
+            if sc.get("trap"):
+                fell = [i for i in mine if i.classification not in PAGED]
+                if fell:
+                    row["problems"].append(f"trap: {sc['trap']} went up and was read as good news "
+                                           f"({', '.join(i.id + ' ' + i.classification for i in fell)})")
+        labels = [getattr(i, "confidence_label", "") or "-" for i in mine]
+        row["evidence_found"] = ", ".join(sorted(set(labels)))
+        want_label = "descriptive" if sc["kind"] == "data" else "causal_evidence"
+        row["evidence"] = labels[0] == want_label
+        if not row["evidence"]:
+            row["problems"].append(f"evidence: incident is '{labels[0]}', expected '{want_label}'")
         kinds = sorted({kind_of(i) for i in mine})
         row["handling_found"] = ", ".join(kinds)
         want = {"fault": {"ALERT"}, "innocent": {"INFO"}, "data": {"DATA"}}[sc["kind"]]
@@ -125,7 +153,8 @@ def main():
     res = score(mon.all_incidents(), truth)
 
     print(f"\n=== SCORECARD [{full.label}] ===")
-    print(f"{'scenario':<18}{'kind':<10}{'detected':<10}{'TTD':<7}{'place':<7}{'cause':<7}{'handling':<10}found")
+    print(f"{'scenario':<18}{'kind':<10}{'detected':<10}{'TTD':<7}{'place':<7}{'cause':<7}{'handling':<10}"
+          f"{'evidence':<17}found")
     for r in res["scenarios"]:
         ttd = "-" if r["ttd_h"] is None else f"{r['ttd_h']:.0f}h"
         found = r["handling_found"] or "-"
@@ -134,7 +163,7 @@ def main():
         if r["cause_found"]:
             found += f" | {r['cause_found']}"
         print(f"{r['id']:<18}{r['kind']:<10}{yn(r['detected']):<10}{ttd:<7}{yn(r['place']):<7}"
-              f"{yn(r['first_cause']):<7}{yn(r['handling']):<10}{found}")
+              f"{yn(r['first_cause']):<7}{yn(r['handling']):<10}{(r['evidence_found'] or '-'):<17}{found}")
     s = res["summary"]
     print(f"\nfully correct: {s['fully_correct']}/{s['scenarios']}  |  detected: {s['detected']}/{s['scenarios']}  |  "
           f"false alarms (paged, no scenario): {s['false_alarms']}  |  extra notes: {s['extra_notes']}  |  "

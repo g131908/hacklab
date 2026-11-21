@@ -35,6 +35,7 @@ class Decomp:
     residual: float | None = None
     checked: int = 0             # number of (segment, hour) points checked
     primary: bool = False
+    signs: list = field(default_factory=list)    # op == "sum": +1 / -1 per factor
 
 
 @dataclass
@@ -80,9 +81,12 @@ class MetricGraph:
                 identities.setdefault(a, []).append(
                     Decomp(a, [b, name], "product", "identity", f"{a} = {b} x {name}"))
             elif e.kind == "product":
-                self.decomps.append(Decomp(name, e.metrics, "product", "identity", f"{name} = {e.text}"))
-            elif e.kind == "sum":
-                self.decomps.append(Decomp(name, e.metrics, "sum", "identity", f"{name} = {e.text}"))
+                self.decomps.append(Decomp(name, e.metrics, "product", "identity", f"{name} = {e.text}", primary=True))
+            elif e.kind == "sum" and e.terms:
+                # a metric's own formula is its primary decomposition (e.g. margin = gmv - discounts - cogs - ad_cost)
+                self.decomps.append(Decomp(name, [t[1] for t in e.terms], "sum", "identity", f"{name} = {e.text}",
+                                           primary=True, signs=[t[0] for t in e.terms]))
+        own = {d.parent for d in self.decomps if d.primary}
 
         # primary decomposition: the one whose first factor can itself be decomposed furthest
         def depth(m, seen=()):
@@ -92,13 +96,16 @@ class MetricGraph:
 
         for parent, cands in identities.items():
             cands.sort(key=lambda d: -depth(d.factors[0]))
+            if parent in own:       # its own formula wins; ratio identities stay as alternatives
+                self.decomps.extend(cands)
+                continue
             cands[0].primary = True
             self.decomps.extend(cands)
             for d in cands[1:]:
                 self.log.append(f"{parent}: chose '{cands[0].text}' as primary (deeper chain) over '{d.text}'")
 
         # composite: a ratio a/b whose identity is not primary = product of the primary chain a -> ... -> b
-        primary = {d.parent: d for d in self.decomps if d.primary}
+        primary = {d.parent: d for d in self.decomps if d.primary and d.op == "product" and len(d.factors) == 2}
         for d in [d for d in self.decomps if d.kind == "identity" and not d.primary and d.op == "product"]:
             a, b, r = d.parent, d.factors[0], d.factors[1]
             chain, cur = [], a
@@ -120,7 +127,8 @@ class MetricGraph:
             return out
         if d.op == "ratio":
             return parts[0] / parts[1]
-        return sum(parts)
+        signs = d.signs or [1] * len(parts)
+        return sum(s * p for s, p in zip(signs, parts))
 
     def validate_decomp(self, d: Decomp, tol: float = 1e-6) -> Decomp:
         s = self.store
@@ -217,8 +225,11 @@ class MetricGraph:
         comps = self.store.catalog.get("event_components") or {}
         return [c for c, ms in comps.items() if metric in ms]
 
-    def parents(self, metric: str) -> list[str]:
-        return [e.src for e in self.edges if e.dst == metric and e.type in ("formula", "composite")]
+    def parents(self, metric: str, ratios: bool = False) -> list[str]:
+        """Metrics computed from `metric` via formula/composite edges; with ratios=True also every ratio that
+        uses it (definition edges). The monitor uses ratios=True to recognise symptoms of an open incident."""
+        types = ("formula", "composite", "definition") if ratios else ("formula", "composite")
+        return [e.src for e in self.edges if e.dst == metric and e.type in types]
 
     def roots(self) -> list[str]:
         return [m for m, d in self.metrics.items() if d.get("tier") in ("outcome", "kpi") and not
@@ -235,7 +246,8 @@ class MetricGraph:
         seen.add(root)
         d = self.decomposition(root)
         if d:
-            out.append(f"{indent}  = {' x '.join(d.factors)}   ({d.kind}, {d.status})")
+            rhs = d.text.split(' = ', 1)[1] if d.op == "sum" else ' x '.join(d.factors)
+            out.append(f"{indent}  = {rhs}   ({d.kind}, {d.status})")
             for f in d.factors:
                 out += self.tree(f, indent + "    ", seen)
         for c in self.causes_of(root):

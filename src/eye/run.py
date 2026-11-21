@@ -41,7 +41,15 @@ def print_report(r: dict, quiet: bool = False):
         tag = {"fault": "ALERT", "innocent": "INFO ", "data_incomplete": "DATA ", "unexplained": "ALERT",
                "change": "NOTE "}.get(i["classification"], "NOTE ")
         print(f"   {tag}  {i['incident']} {'NEW' if i['new'] else 'UPDATE'}: {i['headline']}")
-        print(f"          chain {' <- '.join(i['chain'])} | {i['steps']} queries | supported: {i['supported'] or '-'}")
+        print(f"          chain {' <- '.join(i['chain'])} | {i['steps']} queries | supported: {i['supported'] or '-'}"
+              f" | evidence {i.get('label') or '-'} | stop {i.get('stop') or '-'}")
+        conc = [c for c in i.get("changes") or [] if c.get("verdicts")]
+        if len(conc) > 1:
+            print(f"          {len(conc)} changes in the same window, all tested:")
+            for c in conc:
+                verdict = "; ".join(f"{k}: {v['status']}" for k, v in c["verdicts"].items())
+                print(f"            - {c['name']} (owner {c['owner']}, deployed {c['deployed_at'][5:16]}, "
+                      f"first exposure {c['first_exposure_at'][5:16]}) -> {verdict}")
         for u in i["uncertainty"]:
             print(f"          ? {u}")
         rv = i.get("review")

@@ -1,3 +1,8 @@
+# CURRENT FOCUS (Sat 21.11): Eye of the System
+Work only in `src/eye/`, `config/eye/`, `docs/`. Read `HANDOVER.md` first (status, owners, open tasks).
+The sections below describe the OLD ads monitor (`src/monitor/`) – ignore them unless asked.
+Test with `python src\eye\evaluate.py` (free). Do not read data/ CSVs or large logs into context.
+
 # HackLab Berlin – Agentic Monitoring for an Ads Marketplace App
 
 ## Context

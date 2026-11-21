@@ -5,7 +5,8 @@
 
 sources:                    # which raw columns live where (freshness is tracked per source)
   web_analytics: {table: facts, columns: [sessions, searches, zero_result_searches, product_views, add_to_carts]}
-  orders_db:     {table: facts, columns: [checkouts, payment_attempts, orders, gmv, refunds]}
+  orders_db:     {table: facts, columns: [checkouts, payment_attempts, orders, gmv, refunds, discounts, cogs]}
+  ads_platform:  {table: facts, columns: [ad_cost]}
   inventory:     {table: inventory, columns: [listed_skus, in_stock_skus]}
 
 tables:
@@ -32,6 +33,15 @@ metrics:
   - {name: payment_success_rate, description: Successful payments per attempt, expr: orders / payment_attempts, unit: ratio}
   - {name: aov, description: Average order value, expr: gmv / orders, unit: EUR, noise_basis: orders}
   - {name: conversion_rate, description: Orders per session, expr: orders / sessions, unit: ratio, tier: kpi}
+  # --- unit economics (gmv is list value; discounts, cost of goods and paid media come off it)
+  - {name: discounts, description: Discounts granted on orders (EUR), expr: sum(discounts), unit: EUR, noise_basis: orders}
+  - {name: cogs, description: Cost of goods sold (EUR), expr: sum(cogs), unit: EUR, noise_basis: orders}
+  - {name: ad_cost, description: Paid media spend that bought sessions (EUR), expr: sum(ad_cost), unit: EUR}
+  - {name: contribution_margin, description: GMV minus discounts, cost of goods and paid media, expr: gmv - discounts - cogs - ad_cost, unit: EUR, tier: outcome, noise_basis: orders}
+  - {name: discount_share, description: Discounts as share of list value, expr: discounts / gmv, unit: ratio, noise_basis: orders}
+  - {name: cogs_rate, description: Cost of goods as share of list value, expr: cogs / gmv, unit: ratio, noise_basis: orders}
+  - {name: ad_cost_per_session, description: Paid media cost per session, expr: ad_cost / sessions, unit: EUR}
+  - {name: margin_rate, description: Contribution margin per EUR of GMV, expr: contribution_margin / gmv, unit: ratio, tier: kpi, noise_basis: orders}
   # --- supply
   - {name: listed_skus, description: Products listed in the catalog, expr: sum(listed_skus), unit: count}
   - {name: in_stock_skus, description: Listed products currently in stock, expr: sum(in_stock_skus), unit: count}
@@ -45,7 +55,8 @@ event_components:
   payments:        [payment_success_rate, payment_attempt_rate]
   checkout:        [checkout_rate, payment_attempt_rate]
   search:          [search_ctr, search_rate]
-  recommendations: [product_views, search_ctr]
+  recommendations: [product_views, search_ctr, cart_rate, discount_share]   # what is shown changes what is bought
   app:             [sessions, search_rate]
-  marketing:       [sessions, conversion_rate, cart_rate, search_rate]   # campaigns change traffic intent
+  marketing:       [sessions, conversion_rate, cart_rate, search_rate, ad_cost_per_session]   # campaigns change traffic intent and cost
   wholesale:       [in_stock_rate]
+  pricing:         [discount_share]
