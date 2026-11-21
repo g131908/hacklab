@@ -218,9 +218,18 @@ class Store:
         e = self.expr(metric)
         return self._eval_window(e.tree, pd.Timestamp(start), pd.Timestamp(end), filters, by)
 
+    def pooled_value(self, metric: str, start, end, days: int = 7, filters: dict | None = None, by: str | None = None):
+        """Metric over the same hours of the previous `days` days, from pooled sums (ratio of sums).
+        Formula identities hold exactly on pooled values, which makes contributions add up."""
+        wins = [(pd.Timestamp(start) - pd.Timedelta(days=k), pd.Timestamp(end) - pd.Timedelta(days=k))
+                for k in range(1, days + 1)]
+        return self._eval_window(self.expr(metric).tree, wins, None, filters, by)
+
     def _eval_window(self, node, start, end, filters, by):
         if isinstance(node, ast.Call):
             s = self.column_series(node.args[0].id, filters, by)
+            if isinstance(start, list):          # list of windows (pooled baseline)
+                return sum(s.loc[a:b].sum() for a, b in start)
             return s.loc[start:end].sum()
         if isinstance(node, ast.Name):
             return self._eval_window(self.expr(node.id).tree, start, end, filters, by)
