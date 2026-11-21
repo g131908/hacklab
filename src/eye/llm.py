@@ -14,8 +14,44 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 LOG = ROOT / ".agents" / "eye" / "llm_calls.jsonl"
-MODEL = os.environ.get("EYE_MODEL", "claude-opus-5-5")
+MODEL = os.environ.get("EYE_MODEL", "claude-sonnet-5-5")   # cheap default; override with EYE_MODEL
 _client = None
+
+# list prices in USD per million tokens: (input, output, cache read); cache writes cost 1.25x input
+PRICES = {"claude-sonnet-5-5": (2.0, 10.0, 0.10), "claude-opus-5-5": (4.0, 20.0, 0.20),
+          "claude-haiku-5-5": (0.10, 0.50, 0.01), "claude-fable-5-2": (8.0, 40.0, 0.20),
+          "claude-sonnet-5": (2.0, 10.0, 0.20)}
+
+
+def call_cost(c: dict) -> float | None:
+    p = next((v for k, v in PRICES.items() if str(c.get("model", "")).startswith(k)), None)
+    if p is None:
+        return None
+    return (c.get("input_tokens", 0) * p[0] + c.get("cache_write", 0) * p[0] * 1.25
+            + c.get("cache_read", 0) * p[2] + c.get("output_tokens", 0) * p[1]) / 1e6
+
+
+def log_lines() -> int:
+    return sum(1 for _ in LOG.open(encoding="utf-8")) if LOG.exists() else 0
+
+
+def cost_report(since_line: int = 0) -> str:
+    """Cost of the calls logged after `since_line`, plus the running total (estimate from list prices)."""
+    if not LOG.exists():
+        return "Claude: 0 calls, USD 0.00"
+    calls = [json.loads(l) for l in LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+    def tot(cs):
+        known = [call_cost(c) for c in cs]
+        usd = sum(k for k in known if k is not None)
+        unknown = sum(k is None for k in known)
+        return (f"{len(cs)} calls, {sum(c.get('input_tokens', 0) + c.get('cache_read', 0) + c.get('cache_write', 0) for c in cs):,} in / "
+                f"{sum(c.get('output_tokens', 0) for c in cs):,} out tokens, ~USD {usd:.4f}"
+                + (f" ({unknown} calls on a model without a known price)" if unknown else ""))
+    run = calls[since_line:]
+    models = sorted({c.get("model", "?") for c in run}) or ["-"]
+    return (f"Claude this run: {tot(run)} [{', '.join(models)}]\n"
+            f"Claude total:    {tot(calls)} (estimate from list prices; log: .agents/eye/llm_calls.jsonl)")
 
 
 def _load_dotenv():
@@ -73,6 +109,7 @@ def call_json(purpose: str, system: str, user: str, schema: dict, effort: str = 
         f.write(json.dumps(dict(purpose=purpose, model=getattr(resp, "model", MODEL),
                                 input_tokens=u.input_tokens, output_tokens=u.output_tokens,
                                 cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
+                                cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0,
                                 ms=round((time.perf_counter() - t0) * 1000))) + "\n")
     return out
 

@@ -99,21 +99,22 @@ class Investigator:
     def __init__(self, store: Store, graph: MetricGraph, now, budget: int = 40, planner=None):
         self.s, self.g, self.now, self.budget = store, graph, pd.Timestamp(now), budget
         self.start, self.end = detect.window(self.now)
+        self.nb = max(detect.baseline_days(store, self.start), 1)   # baseline days that exist in the data
         self.planner = planner          # optional callable(inv, options) -> index of chosen option
 
     # ------------------------------------------------------------------ helpers
     def _scale(self, metric: str) -> float:
         """Pooled baseline is 7 days of sums; counts are rescaled to one day at today's traffic level."""
         if self.s.expr(metric).kind == "base" or detect.is_count(self.s, metric):
-            days = [detect.day_factor(self.s, self.start - pd.Timedelta(days=k)) for k in range(1, 8)]
-            return detect.day_factor(self.s, self.start) / sum(days)
+            days = [detect.day_factor(self.s, self.start - pd.Timedelta(days=k)) or 1.0 for k in range(1, self.nb + 1)]
+            return (detect.day_factor(self.s, self.start) or 1.0) / sum(days)
         return 1.0
 
     def actual(self, metric, seg, by=None):
         return self.s.window_value(metric, self.start, self.end, seg, by)
 
     def base(self, metric, seg, by=None):
-        return self.s.pooled_value(metric, self.start, self.end, 7, seg, by) * self._scale(metric)
+        return self.s.pooled_value(metric, self.start, self.end, self.nb, seg, by) * self._scale(metric)
 
     # ------------------------------------------------------------------ WHERE
     def drill(self, metric: str, seg: dict, dim: str) -> dict | None:
@@ -390,12 +391,19 @@ class Investigator:
             inv.signature = f"data|{','.join(k for k, v in comp.items() if v < 0.95)}"
             return self.finish(inv)
 
-        metric, seg = trigger.metric, dict(trigger.segment)
+        metric = trigger.metric
         direction = trigger.direction
         inv.chain = [metric]
-        before = len(seg)
-        seg = self.localize(inv, metric, seg)
-        narrowed = len(seg) > before
+        if trigger.segment:
+            # zoom out first: the same change may sit in a bigger (or different) segment than the one that tripped
+            inv.add("localize", "ZOOM OUT: start from the whole marketplace", dict(trigger_segment=trigger.seg_text()), {},
+                    "a segment tripped the alarm; check from total where the change really concentrates")
+            seg = self.localize(inv, metric, {})
+            if not seg:
+                seg = self.localize(inv, metric, dict(trigger.segment))
+        else:
+            seg = self.localize(inv, metric, {})
+        narrowed = len(seg) > 0
         for _ in range(8):
             if len(inv.steps) >= self.budget:
                 inv.uncertainty.append("query budget exhausted before a leaf metric was reached")
@@ -498,7 +506,11 @@ class Investigator:
                                                        and imp[m]["rel"] is not None and abs(imp[m]["rel"]) > 0.03]
         sup = next((h for h in live if h.status == "supported"), None)
         leaf = inv.chain[-1] if inv.chain else inv.trigger["metric"]
-        inv.signature = inv.signature or f"{leaf}|{seg_text(seg)}"
+        # one incident per root cause: a supported event names the incident; otherwise proximate metric + segment
+        first_event = sup if sup and sup.kind in ("event", "planned") else None
+        if sup and sup.kind == "metric":
+            first_event = next((h for h in live if h.kind == "event"), None)
+        inv.signature = inv.signature or (f"cause|{first_event.cause}" if first_event else f"{leaf}|{seg_text(seg)}")
         if inv.classification == "data_incomplete":
             inv.headline = f"Data incomplete: {inv.trigger['metric']} looks {inv.trigger['rel']:+.0%} but the source is still loading"
         elif inv.classification == "innocent":

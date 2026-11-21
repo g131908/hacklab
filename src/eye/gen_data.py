@@ -1,4 +1,4 @@
-﻿"""DEMO DATA for "Eye of the System": an Amazon-like marketplace, 14 days hourly.
+"""DEMO DATA for "Eye of the System": an Amazon-like marketplace, 14 days hourly.
 
 Outputs in data/eye/ (all synthetic, labelled DEMO DATA):
   facts.csv         hour x country x platform x category: the shopping funnel
@@ -178,8 +178,11 @@ def make(seed: int):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--out", default=str(OUT), help="output folder (default data/eye)")
     args = ap.parse_args()
     f, inv, ev, comp = make(args.seed)
+    global OUT
+    OUT = Path(args.out)
     OUT.mkdir(parents=True, exist_ok=True)
     f.to_csv(OUT / "facts.csv", index=False)
     inv.to_csv(OUT / "inventory.csv", index=False)

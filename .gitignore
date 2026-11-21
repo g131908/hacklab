@@ -16,3 +16,5 @@ dashboard/
 .agents/monitoring/learning-proposals.md
 data/eye/
 .env
+.agents/eye/
+data/eye_seed*/

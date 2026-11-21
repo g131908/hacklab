@@ -14,7 +14,7 @@ tables:
 
 metrics:
   # --- outcomes
-  - {name: gmv, description: Gross merchandise value of successful orders, expr: sum(gmv), unit: EUR, tier: outcome}
+  - {name: gmv, description: Gross merchandise value of successful orders, expr: sum(gmv), unit: EUR, tier: outcome, noise_basis: orders}
   - {name: orders, description: Successfully paid orders, expr: sum(orders), unit: count, tier: outcome}
   # --- funnel volumes
   - {name: sessions, description: Visits to the marketplace (app and web), expr: sum(sessions), unit: count}
@@ -30,7 +30,7 @@ metrics:
   - {name: checkout_rate, description: Checkouts started per add-to-cart, expr: checkouts / add_to_carts, unit: ratio}
   - {name: payment_attempt_rate, description: Payment attempts per checkout, expr: payment_attempts / checkouts, unit: ratio}
   - {name: payment_success_rate, description: Successful payments per attempt, expr: orders / payment_attempts, unit: ratio}
-  - {name: aov, description: Average order value, expr: gmv / orders, unit: EUR}
+  - {name: aov, description: Average order value, expr: gmv / orders, unit: EUR, noise_basis: orders}
   - {name: conversion_rate, description: Orders per session, expr: orders / sessions, unit: ratio, tier: kpi}
   # --- supply
   - {name: listed_skus, description: Products listed in the catalog, expr: sum(listed_skus), unit: count}
@@ -47,5 +47,5 @@ event_components:
   search:          [search_ctr, search_rate]
   recommendations: [product_views, search_ctr]
   app:             [sessions, search_rate]
-  marketing:       [sessions, conversion_rate]
+  marketing:       [sessions, conversion_rate, cart_rate, search_rate]   # campaigns change traffic intent
   wholesale:       [in_stock_rate]

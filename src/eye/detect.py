@@ -17,8 +17,10 @@ from .store import NotApplicable, Store
 
 H = pd.Timedelta(hours=1)
 WINDOW_H = 3
-Z_MIN = 4.0
-REL_MIN = 0.08
+Z_MIN = 4.5
+Z_STRONG = 8.0        # above this, one window is enough; below, the previous window must agree (persistence)
+REL_MIN = 0.10
+EUR_CV = 1.2          # order-level variation of order values (category mix): noise of EUR metrics ~ 1.2/sqrt(orders)
 MIN_VOLUME = 100
 
 
@@ -32,14 +34,23 @@ def day_factor(store: Store, day: pd.Timestamp) -> float:
     daily = s.groupby(s.index.normalize()).agg(["sum", "count"])
     full = daily[daily["count"] == 24]["sum"]
     d = pd.Timestamp(day).normalize()
-    if d in full.index and len(full) >= 3:
+    prev = d - pd.Timedelta(days=7)
+    # the weekday level comes from the same weekday one week earlier, never from the day itself:
+    # a campaign or outage on the day must not leak into what we expect for that day
+    if prev in full.index and len(full) >= 3:
+        f = float(full.loc[prev] / full.mean())
+    elif d in full.index and len(full) >= 3:      # first week of history: no earlier weekday to use
         f = float(full.loc[d] / full.mean())
-    elif (d - pd.Timedelta(days=7)) in full.index and len(full) >= 3:   # today: use the same weekday last week
-        f = float(full.loc[d - pd.Timedelta(days=7)] / full.mean())
     else:
-        f = 1.0
+        f = None        # weekday level not learnable yet (no earlier same weekday, day not complete)
     store._cache[key] = f
     return f
+
+
+def baseline_days(store: Store, start) -> int:
+    """How many of the previous 7 days have this window fully inside the data."""
+    first = store.hours[0]
+    return int(min(7, max(0, (pd.Timestamp(start) - first) // pd.Timedelta(days=1))))
 
 
 def is_count(store: Store, metric: str) -> bool:
@@ -112,22 +123,36 @@ def volume(store: Store, metric: str, start, end, seg: dict) -> float:
     return min(vols) if vols else MIN_VOLUME
 
 
-def measure(store: Store, metric: str, seg: dict, now: pd.Timestamp, hours: int = WINDOW_H) -> Measurement:
+def measure(store: Store, metric: str, seg: dict, now: pd.Timestamp, hours: int = WINDOW_H,
+            persistence: bool = True) -> Measurement:
+    m = _measure(store, metric, seg, now, hours)
+    if persistence and m.status == "anomaly" and abs(m.z) < Z_STRONG:
+        prev = _measure(store, metric, seg, now - H, hours)
+        if not (prev.status == "anomaly" and prev.direction == m.direction):
+            m.status = "candidate"      # one window only: watch, do not investigate yet
+    return m
+
+
+def _measure(store: Store, metric: str, seg: dict, now: pd.Timestamp, hours: int = WINDOW_H) -> Measurement:
     start, end = window(now, hours)
     base = dict(metric=metric, segment=dict(seg), start=str(start), end=str(end))
     try:
+        nb = baseline_days(store, start)
         actual = float(store.window_value(metric, start, end, seg))
         daily = [float(store.window_value(metric, start - pd.Timedelta(days=k), end - pd.Timedelta(days=k), seg))
-                 for k in range(1, 8)]
-        pooled = float(store.pooled_value(metric, start, end, 7, seg))
+                 for k in range(1, nb + 1)]
+        pooled = float(store.pooled_value(metric, start, end, max(nb, 1), seg))
         vol = volume(store, metric, start, end, seg)
     except NotApplicable:
         return Measurement(**base, actual=np.nan, expected=np.nan, pooled=np.nan, rel=np.nan, z=np.nan, volume=0,
                            completeness=1.0, status="n/a", direction="")
     comp = completeness(store, metric, start, end)
     if is_count(store, metric):   # remove the weekday rhythm before comparing days
-        daily = [d / day_factor(store, start - pd.Timedelta(days=k)) for k, d in enumerate(daily, start=1)]
         today = day_factor(store, start)
+        if today is None:         # first week: a normal Saturday would look like a +10% anomaly
+            return Measurement(**base, actual=actual, expected=np.nan, pooled=pooled, rel=np.nan, z=np.nan,
+                               volume=vol, completeness=comp, status="no_baseline", direction="")
+        daily = [d / (day_factor(store, start - pd.Timedelta(days=k)) or 1.0) for k, d in enumerate(daily, start=1)]
     else:
         today = 1.0
     daily = [d for d in daily if d == d and not math.isinf(d)]
@@ -136,7 +161,11 @@ def measure(store: Store, metric: str, seg: dict, now: pd.Timestamp, hours: int 
                            completeness=comp, status="no_baseline", direction="")
     exp = float(np.median(daily)) * today
     mad = 1.4826 * float(np.median(np.abs(np.array(daily) * today - exp)))
-    if store.expr(metric).kind == "base":
+    basis = store.metrics[metric].get("noise_basis")
+    if basis:
+        n = float(store.pooled_value(basis, start, end, max(nb, 1), seg)) / max(nb, 1)
+        floor = abs(exp) * EUR_CV / math.sqrt(max(n, 1.0))
+    elif store.expr(metric).kind == "base":
         floor = math.sqrt(max(exp, 1.0))
     else:
         p = min(max(abs(exp), 1e-6), 1 - 1e-6) if abs(exp) < 1 else abs(exp)

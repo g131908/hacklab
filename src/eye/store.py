@@ -6,6 +6,7 @@ with the completeness that data had at the time (used by the live loop and the d
 from __future__ import annotations
 
 import ast
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "config" / "eye" / "metrics.yaml"
 ADDED = ROOT / "config" / "eye" / "added_metrics.yaml"     # written by the extension agent
-DATA = ROOT / "data" / "eye"
+DATA = Path(os.environ["EYE_DATA"]) if os.environ.get("EYE_DATA") else ROOT / "data" / "eye"   # EYE_DATA: other dataset
 H = pd.Timedelta(hours=1)
 
 
@@ -84,6 +85,7 @@ class Store:
     now: pd.Timestamp | None = None          # clock (None = all data)
     label: str = "DEMO DATA"
     _cache: dict = field(default_factory=dict, repr=False)
+    _parent: "Store | None" = field(default=None, repr=False)
 
     # --------------------------------------------------------------- loading
     @staticmethod
@@ -120,7 +122,8 @@ class Store:
     def asof(self, ts) -> "Store":
         ts = pd.Timestamp(ts)
         return Store(self.catalog, {k: v[v.ts <= ts] for k, v in self.tables.items()},
-                     self.events[self.events.ts <= ts], self.completeness[self.completeness.ts <= ts], ts, self.label)
+                     self.events[self.events.ts <= ts], self.completeness[self.completeness.ts <= ts], ts, self.label,
+                     _parent=self._parent or self)
 
     # --------------------------------------------------------------- catalog helpers
     @property
@@ -170,9 +173,29 @@ class Store:
     # --------------------------------------------------------------- evaluation
     def column_series(self, column: str, filters: dict | None = None, by: str | None = None) -> pd.Series | pd.DataFrame:
         filters = {k: v for k, v in (filters or {}).items() if v not in (None, "*")}
+        key = ("col", column, tuple(sorted((k, str(v)) for k, v in filters.items())), by)
+        if self._parent is not None:
+            # a clocked view shares the full store's cache: hourly sums do not depend on later hours,
+            # so slicing the cached full series at `now` is exact
+            return self._parent.column_series(column, filters, by).loc[:self.now]
+        if key in self._cache:
+            return self._cache[key]
+        out = self._column_series(column, filters, by)
+        self._cache[key] = out
+        return out
+
+    def _column_series(self, column: str, filters: dict, by: str | None):
         tname = self.column_table(column)
         df = self.tables[tname]
         tdims = self.catalog["tables"][tname]["dims"]
+        excl = filters.pop("__not__", None)        # exclude one segment (e.g. an incident's segment)
+        if excl:
+            if any(k not in tdims for k in excl):
+                raise NotApplicable(f"{column} ({tname}) cannot exclude {excl}")
+            mask = pd.Series(True, index=df.index)
+            for k, v in excl.items():
+                mask &= df[k] == v
+            df = df[~mask]
         for k, v in filters.items():
             if k not in tdims:
                 raise NotApplicable(f"{column} ({tname}) has no dimension {k}")
@@ -185,7 +208,7 @@ class Store:
 
     def series(self, metric: str, filters: dict | None = None, by: str | None = None):
         """Hourly series of a metric (or a DataFrame with one column per `by` value)."""
-        key = ("series", metric, tuple(sorted((filters or {}).items())), by)
+        key = ("series", metric, tuple(sorted((k, str(v)) for k, v in (filters or {}).items())), by)
         if key in self._cache:
             return self._cache[key]
         e = self.expr(metric)
