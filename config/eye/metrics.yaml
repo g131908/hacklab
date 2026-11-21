@@ -1,0 +1,51 @@
+# Metric catalog for "Eye of the System" (DEMO marketplace).
+# Contributors only describe a metric (name, description, expression). Its place in the graph,
+# its formula relationships, dimensions and validation are derived by the agent (src/eye/graph.py).
+# Expression language: sum(<column>) for base metrics; + - * / over other metric names.
+
+sources:                    # which raw columns live where (freshness is tracked per source)
+  web_analytics: {table: facts, columns: [sessions, searches, zero_result_searches, product_views, add_to_carts]}
+  orders_db:     {table: facts, columns: [checkouts, payment_attempts, orders, gmv, refunds]}
+  inventory:     {table: inventory, columns: [listed_skus, in_stock_skus]}
+
+tables:
+  facts:     {file: facts.csv, dims: [country, platform, category]}
+  inventory: {file: inventory.csv, dims: [category]}
+
+metrics:
+  # --- outcomes
+  - {name: gmv, description: Gross merchandise value of successful orders, expr: sum(gmv), unit: EUR, tier: outcome}
+  - {name: orders, description: Successfully paid orders, expr: sum(orders), unit: count, tier: outcome}
+  # --- funnel volumes
+  - {name: sessions, description: Visits to the marketplace (app and web), expr: sum(sessions), unit: count}
+  - {name: searches, description: Search queries submitted, expr: sum(searches), unit: count}
+  - {name: product_views, description: Product detail page views from search results, expr: sum(product_views), unit: count}
+  - {name: add_to_carts, description: Products added to cart, expr: sum(add_to_carts), unit: count}
+  - {name: checkouts, description: Checkout flows started, expr: sum(checkouts), unit: count}
+  - {name: payment_attempts, description: Payment authorisations attempted, expr: sum(payment_attempts), unit: count}
+  # --- funnel rates
+  - {name: search_rate, description: Share of sessions that search, expr: searches / sessions, unit: ratio}
+  - {name: search_ctr, description: Product views per search (result relevance), expr: product_views / searches, unit: ratio}
+  - {name: cart_rate, description: Add-to-carts per product view, expr: add_to_carts / product_views, unit: ratio}
+  - {name: checkout_rate, description: Checkouts started per add-to-cart, expr: checkouts / add_to_carts, unit: ratio}
+  - {name: payment_attempt_rate, description: Payment attempts per checkout, expr: payment_attempts / checkouts, unit: ratio}
+  - {name: payment_success_rate, description: Successful payments per attempt, expr: orders / payment_attempts, unit: ratio}
+  - {name: aov, description: Average order value, expr: gmv / orders, unit: EUR}
+  - {name: conversion_rate, description: Orders per session, expr: orders / sessions, unit: ratio, tier: kpi}
+  # --- supply
+  - {name: listed_skus, description: Products listed in the catalog, expr: sum(listed_skus), unit: count}
+  - {name: in_stock_skus, description: Listed products currently in stock, expr: sum(in_stock_skus), unit: count}
+  - {name: in_stock_rate, description: Share of listed products that are in stock, expr: in_stock_skus / listed_skus, unit: ratio}
+
+# Possible causes: hypotheses the agent may test, never treated as arithmetic.
+# Event components connect the change log to the metrics a change of that component can move.
+causes:
+  - {from: in_stock_rate, to: cart_rate, join: [category], reason: "out-of-stock products cannot be added to the cart"}
+event_components:
+  payments:        [payment_success_rate, payment_attempt_rate]
+  checkout:        [checkout_rate, payment_attempt_rate]
+  search:          [search_ctr, search_rate]
+  recommendations: [product_views, search_ctr]
+  app:             [sessions, search_rate]
+  marketing:       [sessions, conversion_rate]
+  wholesale:       [in_stock_rate]
