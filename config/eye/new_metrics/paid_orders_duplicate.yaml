@@ -1,0 +1,4 @@
+name: paid_orders
+description: Number of paid orders (same as orders, sent in by another team)
+expr: sum(orders)
+unit: count

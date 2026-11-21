@@ -15,6 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "config" / "eye" / "metrics.yaml"
+ADDED = ROOT / "config" / "eye" / "added_metrics.yaml"     # written by the extension agent
 DATA = ROOT / "data" / "eye"
 H = pd.Timedelta(hours=1)
 
@@ -86,8 +87,15 @@ class Store:
 
     # --------------------------------------------------------------- loading
     @staticmethod
-    def load(catalog_path: Path = CATALOG, data_dir: Path = DATA) -> "Store":
+    def load(catalog_path: Path = CATALOG, data_dir: Path = DATA, added_path: Path | None = ADDED) -> "Store":
         cat = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+        if added_path and added_path.exists():
+            extra = yaml.safe_load(added_path.read_text(encoding="utf-8")) or {}
+            cat["metrics"] += extra.get("metrics") or []
+            cat["causes"] = (cat.get("causes") or []) + (extra.get("causes") or [])
+            for comp, mets in (extra.get("event_components") or {}).items():
+                cat.setdefault("event_components", {}).setdefault(comp, [])
+                cat["event_components"][comp] += [m for m in mets if m not in cat["event_components"][comp]]
         tables = {}
         for name, t in cat["tables"].items():
             tables[name] = pd.read_csv(data_dir / t["file"], parse_dates=["ts"])
@@ -96,6 +104,18 @@ class Store:
             ev["end"] = pd.to_datetime(ev["end"])
         comp = pd.read_csv(data_dir / "completeness.csv", parse_dates=["ts"])
         return Store(cat, tables, ev, comp)
+
+    def with_metrics(self, metrics: list[dict], causes: list[dict] | None = None,
+                     components: dict | None = None) -> "Store":
+        """A copy of the store whose catalog also contains `metrics` (used to test a new metric)."""
+        import copy
+        cat = copy.deepcopy(self.catalog)
+        cat["metrics"] = cat["metrics"] + metrics
+        cat["causes"] = (cat.get("causes") or []) + (causes or [])
+        for comp, mets in (components or {}).items():
+            cat.setdefault("event_components", {}).setdefault(comp, [])
+            cat["event_components"][comp] += [m for m in mets if m not in cat["event_components"][comp]]
+        return Store(cat, self.tables, self.events, self.completeness, self.now, self.label)
 
     def asof(self, ts) -> "Store":
         ts = pd.Timestamp(ts)

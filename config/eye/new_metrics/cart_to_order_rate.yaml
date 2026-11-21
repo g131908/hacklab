@@ -1,0 +1,4 @@
+name: cart_to_order_rate
+description: Orders per add-to-cart, how many carts turn into paid orders
+expr: sum(orders) / sum(add_to_carts)
+unit: ratio

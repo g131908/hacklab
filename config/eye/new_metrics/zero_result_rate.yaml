@@ -1,0 +1,4 @@
+name: zero_result_rate
+description: Share of searches that return no results at all (search quality / relevance)
+expr: sum(zero_result_searches) / sum(searches)
+unit: ratio

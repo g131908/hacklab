@@ -1,0 +1,4 @@
+name: refund_rate
+description: Share of orders that were refunded (returns)
+expr: sum(refunds) / sum(orders)
+unit: ratio
